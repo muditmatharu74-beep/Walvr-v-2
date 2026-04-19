@@ -26,13 +26,11 @@ export default async function DashboardPage() {
   return (
     <main className="min-h-screen px-4 py-10">
       <div className="max-w-5xl mx-auto space-y-10">
-
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold gradient-text">Wavlr</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              {user.email} · {profile?.plan ?? "free"} plan
+              {user.email} &middot; {profile?.plan ?? "free"} plan
             </p>
           </div>
           <div className="flex gap-3">
@@ -51,7 +49,6 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Videos */}
         <div className="space-y-4">
           <h2 className="text-xl font-semibold">Your Videos</h2>
 
@@ -106,7 +103,6 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
-
       </div>
     </main>
   );
