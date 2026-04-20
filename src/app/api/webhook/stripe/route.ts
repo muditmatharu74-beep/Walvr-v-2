@@ -1,10 +1,15 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2024-06-20",
 });
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(request: Request) {
   const body = await request.text();
@@ -23,8 +28,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  const supabase = await createClient();
-
   switch (event.type) {
     case "customer.subscription.created":
     case "customer.subscription.updated": {
@@ -38,10 +41,7 @@ export async function POST(request: Request) {
 
       await supabase
         .from("profiles")
-        .update({
-          plan,
-          stripe_subscription_id: subscription.id,
-        })
+        .update({ plan, stripe_subscription_id: subscription.id })
         .eq("stripe_customer_id", customerId);
 
       break;
@@ -53,10 +53,7 @@ export async function POST(request: Request) {
 
       await supabase
         .from("profiles")
-        .update({
-          plan: "free",
-          stripe_subscription_id: null,
-        })
+        .update({ plan: "free", stripe_subscription_id: null })
         .eq("stripe_customer_id", customerId);
 
       break;
