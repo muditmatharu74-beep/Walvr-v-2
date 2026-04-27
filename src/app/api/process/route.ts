@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -6,14 +6,19 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
 export async function POST(request: Request) {
+  let videoId: string | undefined;
+
   try {
-    const { videoId, fileUrl, title, artist, captionStyle } =
-      await request.json();
+    const body = await request.json();
+    videoId = body.videoId;
+    const { fileUrl, title, artist, captionStyle } = body;
 
-    const supabase = await createClient();
-
-    // Update status to processing
     await supabase
       .from("videos")
       .update({ status: "processing" })
@@ -27,14 +32,13 @@ export async function POST(request: Request) {
       title,
       artist,
       lyrics: transcription.text,
-      words: transcription.words,
     });
 
-    // Step 3: Save analysis and captions
+    // Step 3: Save analysis
     await supabase
       .from("videos")
       .update({
-        analysis: analysis,
+        analysis,
         captions: transcription.words,
         mood: analysis.mood,
         genre: analysis.genre,
@@ -42,52 +46,44 @@ export async function POST(request: Request) {
       })
       .eq("id", videoId);
 
-    // Step 4: Kick off Creatomate render
+    // Step 4: Pick clips from library
+    const clips = await pickClips(analysis.mood, analysis.energy);
+
+    // Step 5: Start Creatomate render
     const render = await startRender({
       videoId,
       analysis,
-      captions: transcription.words,
+      captions: transcription.words ?? [],
       captionStyle,
       title,
       artist,
+      fileUrl,
+      clips,
     });
 
-    // Save render ID
     await supabase
       .from("videos")
-      .update({
-        render_id: render.id,
-        status: "rendering",
-      })
+      .update({ render_id: render.id, status: "rendering" })
       .eq("id", videoId);
 
     return NextResponse.json({ success: true, renderId: render.id });
   } catch (err) {
     console.error("Process error:", err);
-
-    const { videoId } = await request.json().catch(() => ({}));
     if (videoId) {
-      const supabase = await createClient();
       await supabase
         .from("videos")
         .update({ status: "error" })
         .eq("id", videoId);
     }
-
-    return NextResponse.json(
-      { error: "Processing failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
 }
 
 async function transcribeAudio(fileUrl: string) {
-  // Download the file
   const response = await fetch(fileUrl);
   const buffer = await response.arrayBuffer();
   const blob = new Blob([buffer], { type: "audio/mpeg" });
 
-  // Call Whisper API
   const formData = new FormData();
   formData.append("file", blob, "audio.mp3");
   formData.append("model", "whisper-1");
@@ -98,17 +94,12 @@ async function transcribeAudio(fileUrl: string) {
     "https://api.openai.com/v1/audio/transcriptions",
     {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
+      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
       body: formData,
     }
   );
 
-  if (!whisperRes.ok) {
-    throw new Error("Whisper transcription failed");
-  }
-
+  if (!whisperRes.ok) throw new Error("Whisper transcription failed");
   return whisperRes.json();
 }
 
@@ -116,12 +107,10 @@ async function analyzeWithClaude({
   title,
   artist,
   lyrics,
-  words,
 }: {
   title: string;
   artist: string;
   lyrics: string;
-  words: Array<{ word: string; start: number; end: number }>;
 }) {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
@@ -129,26 +118,21 @@ async function analyzeWithClaude({
     messages: [
       {
         role: "user",
-        content: `You are a music video director AI. Analyze this song and return a JSON object only, no markdown.
+        content: `You are a music video director AI. Analyze this song and return JSON only, no markdown.
 
 Song: "${title}" by ${artist}
+Lyrics: ${lyrics}
 
-Lyrics:
-${lyrics}
-
-Return this exact JSON structure:
+Return exactly:
 {
   "mood": "one of: energetic, dark, sad, romantic, aggressive, chill, uplifting",
   "energy": "one of: high, medium, low",
   "genre": "detected genre",
-  "themes": ["theme1", "theme2"],
+  "themes": ["theme1"],
   "clipStyle": "one of: fast-cuts, slow-cinematic, mixed",
   "colorGrade": "one of: warm, cold, dark, vibrant, monochrome",
-  "beatMap": [
-    { "time": 0, "type": "verse", "energy": 0.5 },
-    { "time": 30, "type": "chorus", "energy": 0.9 }
-  ],
-  "notes": "brief director notes for clip selection"
+  "cutInterval": 4,
+  "notes": "brief director notes"
 }`,
       },
     ],
@@ -156,21 +140,48 @@ Return this exact JSON structure:
 
   const text =
     message.content[0].type === "text" ? message.content[0].text : "{}";
-
   try {
     return JSON.parse(text);
   } catch {
     return {
-      mood: "energetic",
+      mood: "dark",
       energy: "medium",
       genre: "unknown",
       themes: [],
       clipStyle: "mixed",
-      colorGrade: "vibrant",
-      beatMap: [],
+      colorGrade: "dark",
+      cutInterval: 4,
       notes: "",
     };
   }
+}
+
+async function pickClips(mood: string, energy: string) {
+  // Try exact match first
+  let { data: clips } = await supabase
+    .from("clips")
+    .select("*")
+    .eq("mood", mood)
+    .eq("energy", energy)
+    .limit(10);
+
+  // Fallback to mood only
+  if (!clips || clips.length === 0) {
+    const { data } = await supabase
+      .from("clips")
+      .select("*")
+      .eq("mood", mood)
+      .limit(10);
+    clips = data;
+  }
+
+  // Fallback to any clips
+  if (!clips || clips.length === 0) {
+    const { data } = await supabase.from("clips").select("*").limit(10);
+    clips = data;
+  }
+
+  return clips ?? [];
 }
 
 async function startRender({
@@ -180,6 +191,8 @@ async function startRender({
   captionStyle,
   title,
   artist,
+  fileUrl,
+  clips,
 }: {
   videoId: string;
   analysis: Record<string, unknown>;
@@ -187,7 +200,18 @@ async function startRender({
   captionStyle: string;
   title: string;
   artist: string;
+  fileUrl: string;
+  clips: Array<{ url: string }>;
 }) {
+  // Pick first available clip
+  const clipUrl = clips[0]?.url ?? "";
+
+  // Build lyrics text from captions
+  const lyricsText = captions
+    .map((w) => w.word)
+    .join(" ")
+    .toUpperCase();
+
   const res = await fetch("https://api.creatomate.com/v1/renders", {
     method: "POST",
     headers: {
@@ -197,17 +221,16 @@ async function startRender({
     body: JSON.stringify({
       template_id: process.env.CREATOMATE_TEMPLATE_ID,
       modifications: {
-        title,
-        artist,
-        caption_style: captionStyle,
-        mood: analysis.mood,
-        energy: analysis.energy,
-        captions: JSON.stringify(captions),
+        "background-video": clipUrl,
+        lyrics: lyricsText,
+        audio: fileUrl,
       },
     }),
   });
 
   if (!res.ok) {
+    const err = await res.text();
+    console.error("Creatomate error:", err);
     throw new Error("Creatomate render failed");
   }
 
