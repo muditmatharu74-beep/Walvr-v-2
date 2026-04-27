@@ -12,7 +12,7 @@ const supabase = createClient(
 );
 
 export async function POST(request: Request) {
-  let videoId: string | undefined;
+  let videoId = "";
 
   try {
     const body = await request.json();
