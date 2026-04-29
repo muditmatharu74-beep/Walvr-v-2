@@ -24,17 +24,14 @@ export async function POST(request: Request) {
       .update({ status: "processing" })
       .eq("id", videoId);
 
-    // Step 1: Transcribe with Whisper
     const transcription = await transcribeAudio(fileUrl);
 
-    // Step 2: Analyze with Claude
     const analysis = await analyzeWithClaude({
       title,
       artist,
       lyrics: transcription.text,
     });
 
-    // Step 3: Save analysis
     await supabase
       .from("videos")
       .update({
@@ -46,10 +43,8 @@ export async function POST(request: Request) {
       })
       .eq("id", videoId);
 
-    // Step 4: Pick clips from library
     const clips = await pickClips(analysis.mood, analysis.energy);
 
-    // Step 5: Start Creatomate render
     const render = await startRender({
       videoId,
       analysis,
@@ -157,7 +152,6 @@ Return exactly:
 }
 
 async function pickClips(mood: string, energy: string) {
-  // Try exact match first
   let { data: clips } = await supabase
     .from("clips")
     .select("*")
@@ -165,7 +159,6 @@ async function pickClips(mood: string, energy: string) {
     .eq("energy", energy)
     .limit(10);
 
-  // Fallback to mood only
   if (!clips || clips.length === 0) {
     const { data } = await supabase
       .from("clips")
@@ -175,7 +168,6 @@ async function pickClips(mood: string, energy: string) {
     clips = data;
   }
 
-  // Fallback to any clips
   if (!clips || clips.length === 0) {
     const { data } = await supabase.from("clips").select("*").limit(10);
     clips = data;
@@ -205,7 +197,6 @@ async function startRender({
 }) {
   const clipUrl = clips[0]?.url ?? "";
 
-  // Build word by word caption elements
   const captionElements = captions.map((word, index) => ({
     name: `word-${index}`,
     type: "text",
@@ -233,11 +224,6 @@ async function startRender({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      template_id: process.env.CREATOMATE_TEMPLATE_ID,
-      modifications: {
-        "background-video": clipUrl,
-        audio: fileUrl,
-      },
       source: {
         output_format: "mp4",
         width: 1080,
@@ -260,40 +246,6 @@ async function startRender({
           },
           ...captionElements,
         ],
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    console.error("Creatomate error:", err);
-    throw new Error("Creatomate render failed");
-  }
-
-  const data = await res.json();
-  return data[0];
-}
-// Pick first available clip
-  const clipUrl = clips[0]?.url ?? "";
-
-  // Build lyrics text from captions
-  const lyricsText = captions
-    .map((w) => w.word)
-    .join(" ")
-    .toUpperCase();
-
-  const res = await fetch("https://api.creatomate.com/v1/renders", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.CREATOMATE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      template_id: process.env.CREATOMATE_TEMPLATE_ID,
-      modifications: {
-        "background-video": clipUrl,
-        lyrics: lyricsText,
-        audio: fileUrl,
       },
     }),
   });
