@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +10,42 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [videos, setVideos] = useState<any[]>([]);
+
+  const loadVideos = useCallback(async (userId: string) => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("videos")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+    setVideos(data ?? []);
+    return data ?? [];
+  }, []);
+
+  const checkRenders = useCallback(async (videoList: any[]) => {
+    const rendering = videoList.filter((v) => v.status === "rendering" && v.render_id);
+    for (const video of rendering) {
+      try {
+        const res = await fetch("/api/check-render", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ renderId: video.render_id, videoId: video.id }),
+        });
+        const data = await res.json();
+        if (data.status === "done" || data.status === "error") {
+          setVideos((prev) =>
+            prev.map((v) =>
+              v.id === video.id
+                ? { ...v, status: data.status, render_url: data.url }
+                : v
+            )
+          );
+        }
+      } catch (err) {
+        console.error("Poll error:", err);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -23,14 +59,21 @@ export default function DashboardPage() {
         .from("profiles").select("*").eq("id", user.id).single();
       setProfile(profile);
 
-      const { data: videos } = await supabase
-        .from("videos").select("*").eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-      setVideos(videos ?? []);
+      const videoList = await loadVideos(user.id);
+      checkRenders(videoList);
     }
 
     load();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(async () => {
+      const videoList = await loadVideos(user.id);
+      checkRenders(videoList);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   return (
     <main className="min-h-screen px-4 py-10">
@@ -72,10 +115,10 @@ export default function DashboardPage() {
                     </div>
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                       video.status === "done" ? "bg-green-500/20 text-green-400" :
-                      video.status === "processing" ? "bg-yellow-500/20 text-yellow-400" :
+                      video.status === "rendering" || video.status === "processing" ? "bg-yellow-500/20 text-yellow-400" :
                       "bg-red-500/20 text-red-400"
                     }`}>
-                      {video.status}
+                      {video.status === "rendering" || video.status === "processing" ? "⏳ rendering..." : video.status}
                     </span>
                   </div>
                   {video.status === "done" && video.render_url && (
