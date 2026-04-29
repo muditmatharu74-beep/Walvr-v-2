@@ -203,6 +203,76 @@ async function startRender({
   fileUrl: string;
   clips: Array<{ url: string }>;
 }) {
+  const clipUrl = clips[0]?.url ?? "";
+
+  // Build word by word caption elements
+  const captionElements = captions.map((word, index) => ({
+    name: `word-${index}`,
+    type: "text",
+    track: 2,
+    time: word.start,
+    duration: word.end - word.start + 0.1,
+    x: "50%",
+    y: "50%",
+    width: "90%",
+    height: "auto",
+    x_anchor: "50%",
+    y_anchor: "50%",
+    text: word.word.toUpperCase(),
+    font_family: "Montserrat",
+    font_weight: "700",
+    font_size: 130,
+    fill_color: "#ffffff",
+    text_align: "center",
+  }));
+
+  const res = await fetch("https://api.creatomate.com/v1/renders", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.CREATOMATE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      template_id: process.env.CREATOMATE_TEMPLATE_ID,
+      modifications: {
+        "background-video": clipUrl,
+        audio: fileUrl,
+      },
+      source: {
+        output_format: "mp4",
+        width: 1080,
+        height: 1920,
+        elements: [
+          {
+            name: "background-video",
+            type: "video",
+            track: 1,
+            time: 0,
+            source: clipUrl,
+            fit: "cover",
+          },
+          {
+            name: "audio",
+            type: "audio",
+            track: 3,
+            time: 0,
+            source: fileUrl,
+          },
+          ...captionElements,
+        ],
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("Creatomate error:", err);
+    throw new Error("Creatomate render failed");
+  }
+
+  const data = await res.json();
+  return data[0];
+}
   // Pick first available clip
   const clipUrl = clips[0]?.url ?? "";
 
