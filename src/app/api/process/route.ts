@@ -273,7 +273,7 @@ async function startRender({
   const data = await res.json();
   return data[0];
 }
-  // Pick first available clip
+// Pick first available clip
   const clipUrl = clips[0]?.url ?? "";
 
   // Build lyrics text from captions
