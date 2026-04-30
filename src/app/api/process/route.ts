@@ -261,14 +261,7 @@ async function startRender({
         width: 1080,
         height: 1920,
         elements: [
-          {
-            name: "background-video",
-            type: "video",
-            track: 1,
-            time: 0,
-            source: clipUrl,
-            fit: "cover",
-          },
+        ...videoElements,
           {
             name: "audio",
             type: "audio",
