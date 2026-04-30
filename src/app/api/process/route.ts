@@ -229,26 +229,89 @@ async function startRender({
     source: seg.url,
     fit: "cover",
   }));
-  const captionElements = captions.map((word, index) => ({
-    name: `word-${index}`,
-    type: "text",
-    track: 2,
-    time: word.start,
-    duration: word.end - word.start + 0.1,
-    x: "50%",
-    y: "50%",
-    width: "90%",
-    height: "auto",
-    x_anchor: "50%",
-    y_anchor: "50%",
-    text: word.word.toUpperCase(),
-    font_family: "Montserrat",
-    font_weight: "700",
-    font_size: 130,
-    fill_color: "#ffffff",
-    text_align: "center",
-  }));
+const captionElements = captions.map((word, index) => {
+    const base = {
+      name: `word-${index}`,
+      type: "text",
+      track: 2,
+      time: word.start,
+      duration: word.end - word.start + 0.1,
+      x: "50%",
+      x_anchor: "50%",
+      width: "90%",
+      height: "auto",
+      text: word.word.toUpperCase(),
+      text_align: "center",
+    };
 
+    switch (captionStyle) {
+      case "word-highlight":
+        return {
+          ...base,
+          y: "50%",
+          y_anchor: "50%",
+          font_family: "Montserrat",
+          font_weight: "700",
+          font_size: 130,
+          fill_color: "#ffffff",
+          background_color: "rgba(255,255,255,0.15)",
+          background_x_padding: "8%",
+          background_y_padding: "4%",
+          background_border_radius: "8px",
+        };
+
+      case "frosted":
+        return {
+          ...base,
+          y: "50%",
+          y_anchor: "50%",
+          font_family: "Montserrat",
+          font_weight: "600",
+          font_size: 110,
+          fill_color: "#ffffff",
+          background_color: "rgba(255,255,255,0.2)",
+          background_x_padding: "10%",
+          background_y_padding: "6%",
+          background_border_radius: "16px",
+        };
+
+      case "minimal":
+        return {
+          ...base,
+          y: "85%",
+          y_anchor: "50%",
+          font_family: "Montserrat",
+          font_weight: "400",
+          font_size: 70,
+          fill_color: "rgba(255,255,255,0.85)",
+        };
+
+      case "karaoke":
+        return {
+          ...base,
+          y: "50%",
+          y_anchor: "50%",
+          font_family: "Montserrat",
+          font_weight: "800",
+          font_size: 130,
+          fill_color: "#ffdd00",
+          stroke_color: "#ffffff",
+          stroke_width: "1.5%",
+        };
+
+      case "bold-overlay":
+      default:
+        return {
+          ...base,
+          y: "50%",
+          y_anchor: "50%",
+          font_family: "Montserrat",
+          font_weight: "700",
+          font_size: 130,
+          fill_color: "#ffffff",
+        };
+    }
+  });
   const res = await fetch("https://api.creatomate.com/v1/renders", {
     method: "POST",
     headers: {
