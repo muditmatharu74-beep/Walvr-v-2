@@ -195,8 +195,40 @@ async function startRender({
   fileUrl: string;
   clips: Array<{ url: string }>;
 }) {
-  const clipUrl = clips[0]?.url ?? "";
+// Calculate clip segments based on song duration
+  const songDuration = captions.length > 0
+    ? captions[captions.length - 1].end + 1
+    : 30;
 
+  const cutInterval = (analysis.cutInterval as number) ?? 4;
+  const availableClips = clips.length > 0 ? clips : [{ url: "" }];
+
+  // Build video segments
+  const segments: { url: string; start: number; duration: number }[] = [];
+  let currentTime = 0;
+  let clipIndex = 0;
+
+  while (currentTime < songDuration) {
+    const segmentDuration = Math.min(cutInterval, songDuration - currentTime);
+    segments.push({
+      url: availableClips[clipIndex % availableClips.length].url,
+      start: currentTime,
+      duration: segmentDuration,
+    });
+    currentTime += segmentDuration;
+    clipIndex++;
+  }
+
+  // Build video elements from segments
+  const videoElements = segments.map((seg, index) => ({
+    name: `clip-${index}`,
+    type: "video",
+    track: 1,
+    time: seg.start,
+    duration: seg.duration,
+    source: seg.url,
+    fit: "cover",
+  }));
   const captionElements = captions.map((word, index) => ({
     name: `word-${index}`,
     type: "text",
