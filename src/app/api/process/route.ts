@@ -257,7 +257,7 @@ const captionElements = captions.map((word, index) => {
           background_color: "rgba(255,255,255,0.15)",
           background_x_padding: "8%",
           background_y_padding: "4%",
-          background_border_radius: "8px",
+          background_border_radius: "2%",
         };
 
       case "frosted":
@@ -272,7 +272,7 @@ const captionElements = captions.map((word, index) => {
           background_color: "rgba(255,255,255,0.2)",
           background_x_padding: "10%",
           background_y_padding: "6%",
-          background_border_radius: "16px",
+          background_border_radius: "4%",
         };
 
       case "minimal":
