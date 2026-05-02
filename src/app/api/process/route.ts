@@ -270,7 +270,7 @@ const captionElements = captions.map((word, index) => {
           font_size: 110,
           fill_color: "#ffffff",
           shadow_color: "#ffffff",
-          shadow_blur: "8%",
+          shadow_blur: "40%",
         };
 
       case "minimal":
