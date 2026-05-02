@@ -260,7 +260,7 @@ const captionElements = captions.map((word, index) => {
           background_border_radius: "2%",
         };
 
-    case "frosted":
+      case "frosted":
         return {
           ...base,
           y: "50%",
@@ -269,8 +269,8 @@ const captionElements = captions.map((word, index) => {
           font_weight: "700",
           font_size: 110,
           fill_color: "#ffffff",
-          shadow_color: "#ffffff",
-          shadow_blur: "40%",
+          stroke_color: "#ffffff",
+          stroke_width: "2px",
         };
 
       case "minimal":
