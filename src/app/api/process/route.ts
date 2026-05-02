@@ -260,19 +260,17 @@ const captionElements = captions.map((word, index) => {
           background_border_radius: "2%",
         };
 
-      case "frosted":
+    case "frosted":
         return {
           ...base,
           y: "50%",
           y_anchor: "50%",
           font_family: "Montserrat",
-          font_weight: "600",
+          font_weight: "700",
           font_size: 110,
           fill_color: "#ffffff",
-          background_color: "rgba(255,255,255,0.2)",
-          background_x_padding: "10%",
-          background_y_padding: "6%",
-          background_border_radius: "4%",
+          shadow_color: "#ffffff",
+          shadow_blur: "8%",
         };
 
       case "minimal":
