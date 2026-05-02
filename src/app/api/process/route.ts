@@ -294,7 +294,7 @@ const captionElements = captions.map((word, index) => {
           font_size: 130,
           fill_color: "#ffdd00",
           stroke_color: "#ffffff",
-          stroke_width: "1.5%",
+          stroke_width: "3px",
         };
 
       case "bold-overlay":
