@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const ADMIN_USER_ID = "9e87c63d-2535-4a00-be94-6dae6899a4ab";
-
 const MOODS = ["dark", "sad", "energetic", "romantic", "aggressive", "chill", "uplifting"];
 const ENERGIES = ["low", "medium", "high"];
 const VIBES = ["Dark & Cinematic", "Blue Aesthetic", "Energetic", "Emotional", "Abstract", "Color Block"];
@@ -15,11 +14,7 @@ export default function AdminPage() {
   const [authorized, setAuthorized] = useState(false);
   const [clips, setClips] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [form, setForm] = useState({
-    mood: "dark",
-    energy: "low",
-    vibe: "Dark & Cinematic",
-  });
+  const [form, setForm] = useState({ mood: "dark", energy: "low", vibe: "Dark & Cinematic" });
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
 
@@ -50,7 +45,6 @@ export default function AdminPage() {
     if (!file) return;
     setUploading(true);
     setMessage("");
-
     try {
       const res = await fetch("/api/admin/upload-clip", {
         method: "POST",
@@ -63,15 +57,12 @@ export default function AdminPage() {
           vibe: form.vibe,
         }),
       });
-
       const { uploadUrl, clipUrl } = await res.json();
-
       await fetch(uploadUrl, {
         method: "PUT",
         headers: { "Content-Type": file.type },
         body: file,
       });
-
       const supabase = createClient();
       await supabase.from("clips").insert({
         name: file.name,
@@ -80,7 +71,6 @@ export default function AdminPage() {
         energy: form.energy,
         vibe: form.vibe,
       });
-
       setMessage("Clip uploaded successfully.");
       setFile(null);
       loadClips();
@@ -88,7 +78,6 @@ export default function AdminPage() {
       setMessage("Upload failed.");
       console.error(err);
     }
-
     setUploading(false);
   }
 
@@ -103,16 +92,13 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen px-4 py-10">
       <div className="max-w-4xl mx-auto space-y-10">
-
         <div>
           <h1 className="text-3xl font-bold gradient-text">Clip Library Admin</h1>
           <p className="text-muted-foreground mt-1">Upload and manage your B-roll clips.</p>
         </div>
 
-        {/* Upload Form */}
         <div className="glass rounded-2xl p-8 space-y-5">
           <h2 className="text-xl font-semibold">Upload New Clip</h2>
-
           <div className="space-y-2">
             <label className="text-sm font-medium">Video File</label>
             <input
@@ -123,7 +109,6 @@ export default function AdminPage() {
             />
             {file && <p className="text-sm text-muted-foreground">{file.name}</p>}
           </div>
-
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Mood</label>
@@ -135,7 +120,6 @@ export default function AdminPage() {
                 {MOODS.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">Energy</label>
               <select
@@ -146,7 +130,6 @@ export default function AdminPage() {
                 {ENERGIES.map((e) => <option key={e} value={e}>{e}</option>)}
               </select>
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">Vibe</label>
               <select
@@ -158,9 +141,7 @@ export default function AdminPage() {
               </select>
             </div>
           </div>
-
           {message && <p className="text-sm text-green-400">{message}</p>}
-
           <button
             onClick={handleUpload}
             disabled={uploading || !file}
@@ -170,7 +151,6 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* Clip Library */}
         <div className="space-y-4">
           <h2 className="text-xl font-semibold">Your Clips ({clips.length})</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -183,18 +163,10 @@ export default function AdminPage() {
                   <span className="px-2 py-1 bg-muted rounded-full">{clip.vibe}</span>
                 </div>
                 <div className="flex gap-2 pt-1">
-                  
-                    href={clip.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-primary hover:underline"
-                  >
+                  <a href={clip.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
                     Preview
                   </a>
-                  <button
-                    onClick={() => handleDelete(clip.id)}
-                    className="text-xs text-red-400 hover:underline"
-                  >
+                  <button onClick={() => handleDelete(clip.id)} className="text-xs text-red-400 hover:underline">
                     Delete
                   </button>
                 </div>
@@ -202,7 +174,6 @@ export default function AdminPage() {
             ))}
           </div>
         </div>
-
       </div>
     </main>
   );
