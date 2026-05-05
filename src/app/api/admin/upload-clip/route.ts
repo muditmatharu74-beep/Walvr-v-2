@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
     const { fileName, fileType, mood, energy, vibe } = await request.json();
 
-    const key = `${vibe.toLowerCase().replace(/\s+/g, "-")}/${Date.now()}-${fileName}`;
+    const key = `${vibe.toLowerCase().replace(/\s+/g, "-").replace(/&/g, "and")}/${Date.now()}-${fileName}`;
 
     // Generate presigned upload URL for R2
     const r2Url = `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${process.env.R2_BUCKET_NAME}/${key}`;
