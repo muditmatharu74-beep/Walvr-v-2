@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/admin/upload-clip": {
+    "src/app/api/admin/upload-clip/route.ts": {
       "maxDuration": 60
     }
   }
