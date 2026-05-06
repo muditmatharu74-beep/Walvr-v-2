@@ -17,7 +17,26 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     videoId = body.videoId;
-    const { fileUrl, title, artist, captionStyle } = body;
+    const { fileUrl, title, artist, captionStyle, userId } = body;
+
+    // Get user plan
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("plan")
+      .eq("id", userId)
+      .single();
+
+    const plan = profile?.plan ?? "free";
+
+    // Check usage limit
+    const withinLimit = await checkUsageLimit(userId, plan);
+    if (!withinLimit) {
+      await supabase
+        .from("videos")
+        .update({ status: "error" })
+        .eq("id", videoId);
+      return NextResponse.json({ error: "Usage limit reached" }, { status: 403 });
+    }
 
     await supabase
       .from("videos")
@@ -54,7 +73,10 @@ export async function POST(request: Request) {
       artist,
       fileUrl,
       clips,
+      plan,
     });
+
+    await incrementUsage(userId);
 
     await supabase
       .from("videos")
@@ -185,6 +207,7 @@ async function startRender({
   artist,
   fileUrl,
   clips,
+  plan,
 }: {
   videoId: string;
   analysis: Record<string, unknown>;
@@ -194,8 +217,8 @@ async function startRender({
   artist: string;
   fileUrl: string;
   clips: Array<{ url: string }>;
+  plan: string;
 }) {
-// Calculate clip segments based on song duration
   const songDuration = captions.length > 0
     ? captions[captions.length - 1].end + 1
     : 30;
@@ -203,7 +226,6 @@ async function startRender({
   const cutInterval = (analysis.cutInterval as number) ?? 4;
   const availableClips = clips.length > 0 ? clips : [{ url: "" }];
 
-  // Build video segments
   const segments: { url: string; start: number; duration: number }[] = [];
   let currentTime = 0;
   let clipIndex = 0;
@@ -219,7 +241,6 @@ async function startRender({
     clipIndex++;
   }
 
-  // Build video elements from segments
   const videoElements = segments.map((seg, index) => ({
     name: `clip-${index}`,
     type: "video",
@@ -229,7 +250,8 @@ async function startRender({
     source: seg.url,
     fit: "cover",
   }));
-const captionElements = captions.map((word, index) => {
+
+  const captionElements = captions.map((word, index) => {
     const base = {
       name: `word-${index}`,
       type: "text",
@@ -310,6 +332,26 @@ const captionElements = captions.map((word, index) => {
         };
     }
   });
+
+  const watermarkElements = plan === "free" ? [{
+    name: "watermark",
+    type: "text",
+    track: 4,
+    time: 0,
+    x: "50%",
+    y: "92%",
+    x_anchor: "50%",
+    y_anchor: "50%",
+    width: "90%",
+    height: "auto",
+    text: "Made with Wavlr",
+    font_family: "Montserrat",
+    font_weight: "600",
+    font_size: 40,
+    fill_color: "rgba(255,255,255,0.5)",
+    text_align: "center",
+  }] : [];
+
   const res = await fetch("https://api.creatomate.com/v1/renders", {
     method: "POST",
     headers: {
@@ -322,7 +364,7 @@ const captionElements = captions.map((word, index) => {
         width: 1080,
         height: 1920,
         elements: [
-        ...videoElements,
+          ...videoElements,
           {
             name: "audio",
             type: "audio",
@@ -331,6 +373,7 @@ const captionElements = captions.map((word, index) => {
             source: fileUrl,
           },
           ...captionElements,
+          ...watermarkElements,
         ],
       },
     }),
@@ -344,4 +387,50 @@ const captionElements = captions.map((word, index) => {
 
   const data = await res.json();
   return data[0];
+}
+
+async function checkUsageLimit(userId: string, plan: string): Promise<boolean> {
+  const limits: Record<string, number> = {
+    free: 3,
+    pro: 20,
+    business: Infinity,
+  };
+
+  const limit = limits[plan] ?? 3;
+  if (limit === Infinity) return true;
+
+  const month = new Date().toISOString().slice(0, 7);
+
+  const { data } = await supabase
+    .from("usage")
+    .select("count")
+    .eq("user_id", userId)
+    .eq("month", month)
+    .single();
+
+  const count = data?.count ?? 0;
+  return count < limit;
+}
+
+async function incrementUsage(userId: string) {
+  const month = new Date().toISOString().slice(0, 7);
+
+  const { data } = await supabase
+    .from("usage")
+    .select("count")
+    .eq("user_id", userId)
+    .eq("month", month)
+    .single();
+
+  if (data) {
+    await supabase
+      .from("usage")
+      .update({ count: data.count + 1 })
+      .eq("user_id", userId)
+      .eq("month", month);
+  } else {
+    await supabase
+      .from("usage")
+      .insert({ user_id: userId, month, count: 1 });
+  }
 }
