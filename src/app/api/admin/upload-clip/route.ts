@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const ADMIN_USER_ID = "9e87c63d-2535-4a00-be94-6dae6899a4ab";
-
-export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
@@ -15,18 +14,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const formData = await request.formData();
-    const file = formData.get("file") as File;
-    const mood = formData.get("mood") as string;
-    const energy = formData.get("energy") as string;
-    const vibe = formData.get("vibe") as string;
+    const { fileName, fileType, mood, energy, vibe } = await request.json();
 
-    if (!file) {
-      return NextResponse.json({ error: "No file" }, { status: 400 });
-    }
-
-    const key = `${vibe.toLowerCase().replace(/\s+/g, "-").replace(/&/g, "and")}/${Date.now()}-${file.name}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const key = `${vibe.toLowerCase().replace(/\s+/g, "-").replace(/&/g, "and")}/${Date.now()}-${fileName}`;
 
     const client = new S3Client({
       region: "auto",
@@ -37,15 +27,19 @@ export async function POST(request: Request) {
       },
     });
 
-    await client.send(new PutObjectCommand({
+    const command = new PutObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME!,
       Key: key,
-      Body: buffer,
-      ContentType: file.type,
-    }));
+      ContentType: fileType,
+    });
+
+    const uploadUrl = await getSignedUrl(client, command, {
+      expiresIn: 3600,
+      unhoistableHeaders: new Set(["x-amz-checksum-crc32"]),
+    });
 
     const clipUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
-    return NextResponse.json({ clipUrl });
+    return NextResponse.json({ uploadUrl, clipUrl });
   } catch (err) {
     console.error("Upload clip error:", err);
     return NextResponse.json({ error: "Failed" }, { status: 500 });
