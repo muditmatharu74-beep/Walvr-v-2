@@ -25,6 +25,8 @@ export async function POST(request: Request) {
         accessKeyId: process.env.R2_ACCESS_KEY_ID!,
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
       },
+      requestChecksumCalculation: "WHEN_REQUIRED" as any,
+      responseChecksumValidation: "WHEN_REQUIRED" as any,
     });
 
     const command = new PutObjectCommand({
@@ -33,12 +35,9 @@ export async function POST(request: Request) {
       ContentType: fileType,
     });
 
-    const uploadUrl = await getSignedUrl(client, command, {
-      expiresIn: 3600,
-      unhoistableHeaders: new Set(["x-amz-checksum-crc32"]),
-    });
-
+    const uploadUrl = await getSignedUrl(client, command, { expiresIn: 3600 });
     const clipUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+
     return NextResponse.json({ uploadUrl, clipUrl });
   } catch (err) {
     console.error("Upload clip error:", err);
