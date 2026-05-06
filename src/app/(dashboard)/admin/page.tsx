@@ -41,7 +41,7 @@ export default function AdminPage() {
     setClips(data ?? []);
   }
 
-async function handleUpload() {
+  async function handleUpload() {
     if (!file) return;
     setUploading(true);
     setMessage("");
@@ -60,29 +60,6 @@ async function handleUpload() {
       const { clipUrl, error } = await res.json();
       if (error) throw new Error(error);
 
-      const supabase = createClient();
-      await supabase.from("clips").insert({
-        name: file.name,
-        url: clipUrl,
-        mood: form.mood,
-        energy: form.energy,
-        vibe: form.vibe,
-      });
-      setMessage("Clip uploaded successfully.");
-      setFile(null);
-      loadClips();
-    } catch (err) {
-      setMessage("Upload failed.");
-      console.error(err);
-    }
-    setUploading(false);
-  }
-      const { uploadUrl, clipUrl } = await res.json();
-      await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
       const supabase = createClient();
       await supabase.from("clips").insert({
         name: file.name,
