@@ -41,25 +41,28 @@ export default function AdminPage() {
     setClips(data ?? []);
   }
 
-  async function handleUpload() {
+async function handleUpload() {
     if (!file) return;
     setUploading(true);
     setMessage("");
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("mood", form.mood);
-      formData.append("energy", form.energy);
-      formData.append("vibe", form.vibe);
-
       const res = await fetch("/api/admin/upload-clip", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileType: file.type,
+          mood: form.mood,
+          energy: form.energy,
+          vibe: form.vibe,
+        }),
       });
-
-      const { clipUrl, error } = await res.json();
-      if (error) throw new Error(error);
-
+      const { uploadUrl, clipUrl } = await res.json();
+      await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
       const supabase = createClient();
       await supabase.from("clips").insert({
         name: file.name,
