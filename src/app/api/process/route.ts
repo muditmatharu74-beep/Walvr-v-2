@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     videoId = body.videoId;
-    const { fileUrl, title, artist, captionStyle, userId } = body;
+    const { fileUrl, title, artist, captionStyle, userId, vibe } = body;
 
     // Get user plan
     const { data: profile } = await supabase
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       })
       .eq("id", videoId);
 
-    const clips = await pickClips(analysis.mood, analysis.energy);
+    const clips = await pickClips(analysis.mood, analysis.energy, vibe);
 
     const render = await startRender({
       videoId,
@@ -173,7 +173,19 @@ Return exactly:
   }
 }
 
-async function pickClips(mood: string, energy: string) {
+async function pickClips(mood: string, energy: string, vibe?: string) {
+  // Try vibe match first
+  if (vibe) {
+    const vibeLabel = vibe.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const { data: vibeClips } = await supabase
+      .from("clips")
+      .select("*")
+      .eq("vibe", vibeLabel)
+      .limit(10);
+    if (vibeClips && vibeClips.length > 0) return vibeClips;
+  }
+
+  // Fallback to mood + energy
   let { data: clips } = await supabase
     .from("clips")
     .select("*")
