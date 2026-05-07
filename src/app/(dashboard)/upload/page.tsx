@@ -97,7 +97,7 @@ export default function UploadPage() {
       if (dbError) throw dbError;
 
       // Kick off processing
-      await fetch("/api/process", {
+ await fetch("/api/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -106,6 +106,7 @@ export default function UploadPage() {
           title,
           artist,
           captionStyle,
+          userId: user.id,
         }),
       });
 
