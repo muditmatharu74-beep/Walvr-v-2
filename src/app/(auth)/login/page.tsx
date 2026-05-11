@@ -36,7 +36,7 @@ export default function LoginPage() {
     <main className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold gradient-text">Wavlr</h1>
+          <h1 className="text-4xl font-bold gradient-text">W∆LVR</h1>
           <p className="text-muted-foreground">Welcome back</p>
         </div>
 
