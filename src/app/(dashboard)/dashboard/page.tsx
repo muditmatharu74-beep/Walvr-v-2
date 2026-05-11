@@ -52,16 +52,9 @@ export default function DashboardPage() {
     async function load() {
       const result = await supabase.auth.getUser();
       const currentUser = result.data.user;
-      if (!currentUser) {
-        router.push("/login");
-        return;
-      }
+      if (!currentUser) { router.push("/login"); return; }
       setUser(currentUser);
-      const profileResult = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", currentUser.id)
-        .single();
+      const profileResult = await supabase.from("profiles").select("*").eq("id", currentUser.id).single();
       setProfile(profileResult.data);
       const videoList = await loadVideos(currentUser.id);
       checkRenders(videoList);
@@ -89,9 +82,34 @@ export default function DashboardPage() {
   ];
 
   return (
-    <main style={{ minHeight: "100vh", background: "#0a0406", fontFamily: "'Georgia', 'Times New Roman', serif", color: "#f5f0eb" }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    <main style={{ minHeight: "100vh", background: "#0a0406", fontFamily: "'Georgia', 'Times New Roman', serif", color: "#f5f0eb", position: "relative", overflow: "hidden" }}>
 
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes wave0 { from { height: 8px; } to { height: 40px; } }
+        @keyframes wave1 { from { height: 12px; } to { height: 80px; } }
+        @keyframes wave2 { from { height: 6px; } to { height: 55px; } }
+        @keyframes wave3 { from { height: 10px; } to { height: 100px; } }
+        @keyframes wave4 { from { height: 8px; } to { height: 65px; } }
+        @keyframes wave5 { from { height: 15px; } to { height: 45px; } }
+        @keyframes wave6 { from { height: 5px; } to { height: 90px; } }
+        @keyframes wave7 { from { height: 10px; } to { height: 70px; } }
+      `}</style>
+
+      {/* Waveform background */}
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: "200px", pointerEvents: "none", zIndex: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", gap: "3px", padding: "0 2rem", opacity: 0.12 }}>
+        {Array.from({ length: 80 }).map((_, i) => (
+          <div key={i} style={{
+            flex: 1,
+            background: "#c8102e",
+            borderRadius: "2px 2px 0 0",
+            animation: `wave${i % 8} ${1.5 + (i % 5) * 0.3}s ease-in-out infinite alternate`,
+            animationDelay: `${(i % 7) * 0.15}s`,
+          }} />
+        ))}
+      </div>
+
+      {/* Nav */}
       <nav style={{ borderBottom: "1px solid rgba(200,16,46,0.15)", padding: "1.25rem 3rem", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(10,4,6,0.9)", position: "sticky", top: 0, zIndex: 50 }}>
         <span style={{ fontSize: "1.4rem", fontWeight: "700", letterSpacing: "0.12em", color: "#c8102e", textTransform: "uppercase" }}>W∆LVR</span>
         <div style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
@@ -104,7 +122,9 @@ export default function DashboardPage() {
         </div>
       </nav>
 
-      <div style={{ padding: "4rem 3rem", maxWidth: "1200px", margin: "0 auto" }}>
+      {/* Content */}
+      <div style={{ padding: "4rem 3rem", maxWidth: "1200px", margin: "0 auto", position: "relative", zIndex: 10 }}>
+
         <div style={{ marginBottom: "3rem" }}>
           <p style={{ fontSize: "0.7rem", letterSpacing: "0.3em", textTransform: "uppercase", color: "#c8102e", marginBottom: "0.75rem" }}>Your Studio</p>
           <h1 style={{ fontSize: "clamp(2rem, 4vw, 3rem)", fontWeight: "700", color: "#f5f0eb", letterSpacing: "-0.02em", lineHeight: "1.1" }}>Your Videos</h1>
@@ -132,7 +152,8 @@ export default function DashboardPage() {
               const isRendering = video.status === "rendering" || video.status === "processing";
               const isError = video.status === "error";
               return (
-                <div key={video.id} style={{ padding: "2rem", background: "#0a0406", transition: "background 0.2s", position: "relative" }}
+                <div key={video.id}
+                  style={{ padding: "2rem", background: "#0a0406", transition: "background 0.2s", position: "relative" }}
                   onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#0f0508"; }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#0a0406"; }}
                 >
