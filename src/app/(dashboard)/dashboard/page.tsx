@@ -80,7 +80,7 @@ export default function DashboardPage() {
       <div className="max-w-5xl mx-auto space-y-10">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold gradient-text">Wavlr</h1>
+            <h1 className="text-3xl font-bold gradient-text">W∆LVR</h1>
             <p className="text-muted-foreground text-sm mt-1">
               {user?.email} &middot; {profile?.plan ?? "free"} plan
             </p>
