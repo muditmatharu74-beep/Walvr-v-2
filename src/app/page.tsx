@@ -55,7 +55,7 @@ export default function HomePage() {
           letterSpacing: "0.15em",
           color: "#c8102e",
           textTransform: "uppercase",
-        }}>WAVLR</span>
+        }}>W∆LVR</span>
         <div style={{ display: "flex", gap: "2rem", alignItems: "center" }}>
           <Link href="/login" style={{
             color: "rgba(255,255,255,0.6)",
@@ -467,11 +467,11 @@ export default function HomePage() {
           letterSpacing: "0.15em",
           color: "#c8102e",
           textTransform: "uppercase",
-        }}>WAVLR</span>
+        }}>W∆LVR</span>
         <p style={{
           color: "rgba(245,240,235,0.2)",
           fontSize: "0.75rem",
-        }}>© 2026 Wavlr. All rights reserved.</p>
+        }}>© 2026 W∆LVR. All rights reserved.</p>
       </footer>
 
     </main>
