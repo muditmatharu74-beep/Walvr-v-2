@@ -8,7 +8,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Wavlr — Turn Your Music Into Content",
+  title: "W∆LVR — Turn Your Music Into Content",
   description:
     "Upload your song and get a 4K video ready to post on Reels, TikTok, and YouTube. Automatically.",
 };
