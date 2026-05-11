@@ -50,13 +50,20 @@ export default function DashboardPage() {
   useEffect(() => {
     const supabase = createClient();
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.push("/login"); return; }
-      setUser(user);
-      const { data: profile } = await supabase
-        .from("profiles").select("*").eq("id", user.id).single();
-      setProfile(profile);
-      const videoList = await loadVideos(user.id);
+      const result = await supabase.auth.getUser();
+      const currentUser = result.data.user;
+      if (!currentUser) {
+        router.push("/login");
+        return;
+      }
+      setUser(currentUser);
+      const profileResult = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", currentUser.id)
+        .single();
+      setProfile(profileResult.data);
+      const videoList = await loadVideos(currentUser.id);
       checkRenders(videoList);
     }
     load();
@@ -72,313 +79,90 @@ export default function DashboardPage() {
   }, [user]);
 
   const plan = profile?.plan ?? "free";
-  const planColors: Record<string, string> = {
-    free: "#888",
-    pro: "#c8102e",
-    business: "#c8102e",
-  };
+  const planColor = plan === "free" ? "#888" : "#c8102e";
+
+  const stats = [
+    { label: "Total Videos", value: String(videos.length) },
+    { label: "Completed", value: String(videos.filter((v) => v.status === "done").length) },
+    { label: "Rendering", value: String(videos.filter((v) => v.status === "rendering" || v.status === "processing").length) },
+    { label: "Plan", value: plan.charAt(0).toUpperCase() + plan.slice(1) },
+  ];
 
   return (
-    <main style={{
-      minHeight: "100vh",
-      background: "#0a0406",
-      fontFamily: "'Georgia', 'Times New Roman', serif",
-      color: "#f5f0eb",
-    }}>
+    <main style={{ minHeight: "100vh", background: "#0a0406", fontFamily: "'Georgia', 'Times New Roman', serif", color: "#f5f0eb" }}>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
-      {/* Nav */}
-      <nav style={{
-        borderBottom: "1px solid rgba(200,16,46,0.15)",
-        padding: "1.25rem 3rem",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        background: "rgba(10,4,6,0.9)",
-        backdropFilter: "blur(12px)",
-        position: "sticky",
-        top: 0,
-        zIndex: 50,
-      }}>
-        <span style={{
-          fontSize: "1.4rem",
-          fontWeight: "700",
-          letterSpacing: "0.12em",
-          color: "#c8102e",
-          textTransform: "uppercase",
-        }}>W∆LVR</span>
-
+      <nav style={{ borderBottom: "1px solid rgba(200,16,46,0.15)", padding: "1.25rem 3rem", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(10,4,6,0.9)", position: "sticky", top: 0, zIndex: 50 }}>
+        <span style={{ fontSize: "1.4rem", fontWeight: "700", letterSpacing: "0.12em", color: "#c8102e", textTransform: "uppercase" }}>W∆LVR</span>
         <div style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
           <div style={{ textAlign: "right" }}>
-            <p style={{
-              fontSize: "0.75rem",
-              color: "rgba(245,240,235,0.4)",
-              letterSpacing: "0.05em",
-              marginBottom: "2px",
-            }}>{user?.email}</p>
-            <p style={{
-              fontSize: "0.65rem",
-              letterSpacing: "0.2em",
-              textTransform: "uppercase",
-              color: planColors[plan],
-            }}>{plan} plan</p>
+            <p style={{ fontSize: "0.75rem", color: "rgba(245,240,235,0.4)", marginBottom: "2px" }}>{user?.email}</p>
+            <p style={{ fontSize: "0.65rem", letterSpacing: "0.2em", textTransform: "uppercase", color: planColor }}>{plan} plan</p>
           </div>
-          <Link href="/upload" style={{
-            padding: "0.6rem 1.5rem",
-            background: "#8b0014",
-            color: "#f5f0eb",
-            textDecoration: "none",
-            fontSize: "0.75rem",
-            letterSpacing: "0.15em",
-            textTransform: "uppercase",
-            border: "1px solid #c8102e",
-          }}>+ New Video</Link>
-          <Link href="/settings" style={{
-            padding: "0.6rem 1.5rem",
-            background: "transparent",
-            color: "rgba(245,240,235,0.5)",
-            textDecoration: "none",
-            fontSize: "0.75rem",
-            letterSpacing: "0.15em",
-            textTransform: "uppercase",
-            border: "1px solid rgba(255,255,255,0.1)",
-          }}>Settings</Link>
+          <Link href="/upload" style={{ padding: "0.6rem 1.5rem", background: "#8b0014", color: "#f5f0eb", textDecoration: "none", fontSize: "0.75rem", letterSpacing: "0.15em", textTransform: "uppercase", border: "1px solid #c8102e" }}>+ New Video</Link>
+          <Link href="/settings" style={{ padding: "0.6rem 1.5rem", background: "transparent", color: "rgba(245,240,235,0.5)", textDecoration: "none", fontSize: "0.75rem", letterSpacing: "0.15em", textTransform: "uppercase", border: "1px solid rgba(255,255,255,0.1)" }}>Settings</Link>
         </div>
       </nav>
 
-      {/* Content */}
       <div style={{ padding: "4rem 3rem", maxWidth: "1200px", margin: "0 auto" }}>
-
-        {/* Header */}
         <div style={{ marginBottom: "3rem" }}>
-          <p style={{
-            fontSize: "0.7rem",
-            letterSpacing: "0.3em",
-            textTransform: "uppercase",
-            color: "#c8102e",
-            marginBottom: "0.75rem",
-          }}>Your Studio</p>
-          <h1 style={{
-            fontSize: "clamp(2rem, 4vw, 3rem)",
-            fontWeight: "700",
-            color: "#f5f0eb",
-            letterSpacing: "-0.02em",
-            lineHeight: 1.1,
-          }}>Your Videos</h1>
+          <p style={{ fontSize: "0.7rem", letterSpacing: "0.3em", textTransform: "uppercase", color: "#c8102e", marginBottom: "0.75rem" }}>Your Studio</p>
+          <h1 style={{ fontSize: "clamp(2rem, 4vw, 3rem)", fontWeight: "700", color: "#f5f0eb", letterSpacing: "-0.02em", lineHeight: "1.1" }}>Your Videos</h1>
         </div>
 
-        {/* Stats row */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-          gap: "1px",
-          marginBottom: "4rem",
-          background: "rgba(200,16,46,0.12)",
-          border: "1px solid rgba(200,16,46,0.12)",
-        }}>
-          {[
-            { label: "Total Videos", value: videos.length },
-            { label: "Completed", value: videos.filter(v => v.status === "done").length },
-            { label: "Rendering", value: videos.filter(v => v.status === "rendering" || v.status === "processing").length },
-            { label: "Plan", value: plan.charAt(0).toUpperCase() + plan.slice(1) },
-          ].map((stat, i) => (
-            <div key={i} style={{
-              padding: "1.5rem 2rem",
-              background: "#0a0406",
-            }}>
-              <p style={{
-                fontSize: "0.65rem",
-                letterSpacing: "0.25em",
-                textTransform: "uppercase",
-                color: "rgba(245,240,235,0.35)",
-                marginBottom: "0.5rem",
-              }}>{stat.label}</p>
-              <p style={{
-                fontSize: "1.75rem",
-                fontWeight: "700",
-                color: i === 3 ? "#c8102e" : "#f5f0eb",
-                letterSpacing: "-0.02em",
-              }}>{stat.value}</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1px", marginBottom: "4rem", background: "rgba(200,16,46,0.12)", border: "1px solid rgba(200,16,46,0.12)" }}>
+          {stats.map((stat, i) => (
+            <div key={i} style={{ padding: "1.5rem 2rem", background: "#0a0406" }}>
+              <p style={{ fontSize: "0.65rem", letterSpacing: "0.25em", textTransform: "uppercase", color: "rgba(245,240,235,0.35)", marginBottom: "0.5rem" }}>{stat.label}</p>
+              <p style={{ fontSize: "1.75rem", fontWeight: "700", color: i === 3 ? "#c8102e" : "#f5f0eb", letterSpacing: "-0.02em" }}>{stat.value}</p>
             </div>
           ))}
         </div>
 
-        {/* Videos Grid */}
         {videos.length === 0 ? (
-          <div style={{
-            border: "1px solid rgba(200,16,46,0.15)",
-            padding: "6rem 2rem",
-            textAlign: "center",
-          }}>
-            <p style={{
-              fontSize: "0.7rem",
-              letterSpacing: "0.3em",
-              textTransform: "uppercase",
-              color: "#c8102e",
-              marginBottom: "1rem",
-            }}>No Videos Yet</p>
-            <p style={{
-              color: "rgba(245,240,235,0.4)",
-              marginBottom: "2.5rem",
-              fontSize: "1rem",
-            }}>Upload your first song and get a 4K lyric video in minutes.</p>
-            <Link href="/upload" style={{
-              padding: "1rem 2.5rem",
-              background: "#8b0014",
-              color: "#f5f0eb",
-              textDecoration: "none",
-              fontSize: "0.8rem",
-              letterSpacing: "0.15em",
-              textTransform: "uppercase",
-              border: "1px solid #c8102e",
-              display: "inline-block",
-            }}>Upload Your First Song</Link>
+          <div style={{ border: "1px solid rgba(200,16,46,0.15)", padding: "6rem 2rem", textAlign: "center" }}>
+            <p style={{ fontSize: "0.7rem", letterSpacing: "0.3em", textTransform: "uppercase", color: "#c8102e", marginBottom: "1rem" }}>No Videos Yet</p>
+            <p style={{ color: "rgba(245,240,235,0.4)", marginBottom: "2.5rem", fontSize: "1rem" }}>Upload your first song and get a 4K lyric video in minutes.</p>
+            <Link href="/upload" style={{ padding: "1rem 2.5rem", background: "#8b0014", color: "#f5f0eb", textDecoration: "none", fontSize: "0.8rem", letterSpacing: "0.15em", textTransform: "uppercase", border: "1px solid #c8102e", display: "inline-block" }}>Upload Your First Song</Link>
           </div>
         ) : (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-            gap: "1px",
-            background: "rgba(200,16,46,0.1)",
-            border: "1px solid rgba(200,16,46,0.1)",
-          }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1px", background: "rgba(200,16,46,0.1)", border: "1px solid rgba(200,16,46,0.1)" }}>
             {videos.map((video) => {
               const isDone = video.status === "done";
               const isRendering = video.status === "rendering" || video.status === "processing";
               const isError = video.status === "error";
-
               return (
-                <div
-                  key={video.id}
-                  style={{
-                    padding: "2rem",
-                    background: "#0a0406",
-                    transition: "background 0.2s",
-                    position: "relative",
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "#0f0508")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "#0a0406")}
+                <div key={video.id} style={{ padding: "2rem", background: "#0a0406", transition: "background 0.2s", position: "relative" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#0f0508"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#0a0406"; }}
                 >
-                  {/* Status indicator */}
-                  <div style={{
-                    position: "absolute",
-                    top: "1.5rem",
-                    right: "1.5rem",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                  }}>
-                    <div style={{
-                      width: "6px",
-                      height: "6px",
-                      borderRadius: "50%",
-                      background: isDone ? "#4ade80" : isRendering ? "#c8102e" : "#555",
-                      boxShadow: isRendering ? "0 0 8px rgba(200,16,46,0.6)" : "none",
-                    }} />
-                    <span style={{
-                      fontSize: "0.6rem",
-                      letterSpacing: "0.2em",
-                      textTransform: "uppercase",
-                      color: isDone ? "#4ade80" : isRendering ? "#c8102e" : "rgba(245,240,235,0.3)",
-                    }}>
+                  <div style={{ position: "absolute", top: "1.5rem", right: "1.5rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: isDone ? "#4ade80" : isRendering ? "#c8102e" : "#555", boxShadow: isRendering ? "0 0 8px rgba(200,16,46,0.6)" : "none" }} />
+                    <span style={{ fontSize: "0.6rem", letterSpacing: "0.2em", textTransform: "uppercase", color: isDone ? "#4ade80" : isRendering ? "#c8102e" : "rgba(245,240,235,0.3)" }}>
                       {isDone ? "Done" : isRendering ? "Rendering" : isError ? "Error" : "Pending"}
                     </span>
                   </div>
-
-                  {/* Title */}
-                  <p style={{
-                    fontSize: "1.1rem",
-                    fontWeight: "600",
-                    color: "#f5f0eb",
-                    marginBottom: "0.25rem",
-                    paddingRight: "5rem",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}>{video.title ?? "Untitled"}</p>
-
-                  <p style={{
-                    fontSize: "0.8rem",
-                    color: "rgba(245,240,235,0.4)",
-                    marginBottom: "1.5rem",
-                    letterSpacing: "0.05em",
-                  }}>{video.artist ?? "Unknown Artist"}</p>
-
-                  {/* Tags */}
-                  <div style={{
-                    display: "flex",
-                    gap: "8px",
-                    flexWrap: "wrap",
-                    marginBottom: "1.5rem",
-                  }}>
+                  <p style={{ fontSize: "1.1rem", fontWeight: "600", color: "#f5f0eb", marginBottom: "0.25rem", paddingRight: "5rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{video.title ?? "Untitled"}</p>
+                  <p style={{ fontSize: "0.8rem", color: "rgba(245,240,235,0.4)", marginBottom: "1.5rem", letterSpacing: "0.05em" }}>{video.artist ?? "Unknown Artist"}</p>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "1.5rem" }}>
                     {video.mood && (
-                      <span style={{
-                        fontSize: "0.6rem",
-                        letterSpacing: "0.15em",
-                        textTransform: "uppercase",
-                        color: "rgba(200,16,46,0.7)",
-                        border: "1px solid rgba(200,16,46,0.2)",
-                        padding: "0.2rem 0.6rem",
-                      }}>{video.mood}</span>
+                      <span style={{ fontSize: "0.6rem", letterSpacing: "0.15em", textTransform: "uppercase", color: "rgba(200,16,46,0.7)", border: "1px solid rgba(200,16,46,0.2)", padding: "0.2rem 0.6rem" }}>{video.mood}</span>
                     )}
                     {video.cap_style && (
-                      <span style={{
-                        fontSize: "0.6rem",
-                        letterSpacing: "0.15em",
-                        textTransform: "uppercase",
-                        color: "rgba(245,240,235,0.3)",
-                        border: "1px solid rgba(255,255,255,0.06)",
-                        padding: "0.2rem 0.6rem",
-                      }}>{video.cap_style}</span>
+                      <span style={{ fontSize: "0.6rem", letterSpacing: "0.15em", textTransform: "uppercase", color: "rgba(245,240,235,0.3)", border: "1px solid rgba(255,255,255,0.06)", padding: "0.2rem 0.6rem" }}>{video.cap_style}</span>
                     )}
                   </div>
-
-                  {/* Action */}
                   {isDone && video.render_url && (
-                    
-                      href={video.render_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        display: "inline-block",
-                        padding: "0.6rem 1.5rem",
-                        background: "transparent",
-                        color: "#c8102e",
-                        textDecoration: "none",
-                        fontSize: "0.7rem",
-                        letterSpacing: "0.2em",
-                        textTransform: "uppercase",
-                        border: "1px solid rgba(200,16,46,0.4)",
-                        transition: "all 0.2s",
-                      }}
-                      onMouseEnter={e => {
-                        (e.currentTarget as HTMLElement).style.background = "#8b0014";
-                        (e.currentTarget as HTMLElement).style.color = "white";
-                      }}
-                      onMouseLeave={e => {
-                        (e.currentTarget as HTMLElement).style.background = "transparent";
-                        (e.currentTarget as HTMLElement).style.color = "#c8102e";
-                      }}
-                    >
-                      Download ↓
-                    </a>
+                    <a href={video.render_url} target="_blank" rel="noopener noreferrer"
+                      style={{ display: "inline-block", padding: "0.6rem 1.5rem", background: "transparent", color: "#c8102e", textDecoration: "none", fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", border: "1px solid rgba(200,16,46,0.4)" }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#8b0014"; (e.currentTarget as HTMLElement).style.color = "white"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "#c8102e"; }}
+                    >Download ↓</a>
                   )}
-
                   {isRendering && (
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <div style={{
-                        width: "16px",
-                        height: "16px",
-                        borderRadius: "50%",
-                        border: "2px solid rgba(200,16,46,0.2)",
-                        borderTop: "2px solid #c8102e",
-                        animation: "spin 1s linear infinite",
-                      }} />
-                      <span style={{
-                        fontSize: "0.7rem",
-                        letterSpacing: "0.15em",
-                        textTransform: "uppercase",
-                        color: "rgba(245,240,235,0.3)",
-                      }}>Processing...</span>
+                      <div style={{ width: "16px", height: "16px", borderRadius: "50%", border: "2px solid rgba(200,16,46,0.2)", borderTop: "2px solid #c8102e", animation: "spin 1s linear infinite" }} />
+                      <span style={{ fontSize: "0.7rem", letterSpacing: "0.15em", textTransform: "uppercase", color: "rgba(245,240,235,0.3)" }}>Processing...</span>
                     </div>
                   )}
                 </div>
@@ -387,13 +171,6 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
-
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </main>
   );
 }
