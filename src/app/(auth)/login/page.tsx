@@ -25,7 +25,7 @@ export default function LoginPage() {
   return (
     <main style={{
       minHeight: "100vh",
-      background: "linear-gradient(160deg, #1a0508 0%, #150305 40%, #1a0609 100%)"
+      background: "linear-gradient(160deg, #1a0508 0%, #150305 40%, #1a0609 100%)",
       fontFamily: "'Georgia', 'Times New Roman', serif",
       color: "#f5f0eb",
       display: "flex",
