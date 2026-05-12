@@ -25,7 +25,7 @@ export default function LoginPage() {
   return (
     <main style={{
       minHeight: "100vh",
-      background: "linear-gradient(160deg, #110508 0%, #0d0305 40%, #130609 100%)",
+      background: "linear-gradient(160deg, #1a0508 0%, #150305 40%, #1a0609 100%)"
       fontFamily: "'Georgia', 'Times New Roman', serif",
       color: "#f5f0eb",
       display: "flex",
@@ -48,7 +48,7 @@ export default function LoginPage() {
       `}</style>
 
       {/* Radial glow */}
-      <div style={{ position: "fixed", top: "30%", left: "50%", transform: "translateX(-50%)", width: "80vw", height: "60vh", background: "radial-gradient(ellipse at center, rgba(139,0,20,0.08) 0%, transparent 70%)", pointerEvents: "none", zIndex: 0 }} />
+      <div style={{ position: "fixed", top: "30%", left: "50%", transform: "translateX(-50%)", width: "80vw", height: "60vh", background: "radial-gradient(ellipse at center, rgba(139,0,20,0.18) 0%, transparent 70%)", pointerEvents: "none", zIndex: 0 }} />
 
       {/* Waveform */}
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: "160px", pointerEvents: "none", zIndex: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", gap: "3px", padding: "0 2rem", opacity: 0.08 }}>
