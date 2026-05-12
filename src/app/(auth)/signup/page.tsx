@@ -16,79 +16,113 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     const supabase = createClient();
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
-
+    if (error) { setError(error.message); setLoading(false); return; }
     router.push("/dashboard");
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold gradient-text">W∆LVR</h1>
-          <p className="text-muted-foreground">Create your free account</p>
-        </div>
+    <main style={{
+      minHeight: "100vh",
+      background: "linear-gradient(160deg, #1a0508 0%, #150305 40%, #1a0609 100%)",
+      fontFamily: "'Georgia', 'Times New Roman', serif",
+      color: "#f5f0eb",
+      display: "flex",
+      flexDirection: "column",
+      position: "relative",
+      overflow: "hidden",
+    }}>
 
-        <form onSubmit={handleSignup} className="glass rounded-2xl p-8 space-y-5">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="you@example.com"
-            />
-          </div>
+      <style>{`
+        @keyframes wave0 { from { height: 8px; } to { height: 40px; } }
+        @keyframes wave1 { from { height: 12px; } to { height: 80px; } }
+        @keyframes wave2 { from { height: 6px; } to { height: 55px; } }
+        @keyframes wave3 { from { height: 10px; } to { height: 100px; } }
+        @keyframes wave4 { from { height: 8px; } to { height: 65px; } }
+        @keyframes wave5 { from { height: 15px; } to { height: 45px; } }
+        @keyframes wave6 { from { height: 5px; } to { height: 90px; } }
+        @keyframes wave7 { from { height: 10px; } to { height: 70px; } }
+        input::placeholder { color: rgba(245,240,235,0.2); }
+        input:focus { border-color: rgba(200,16,46,0.4) !important; outline: none; }
+      `}</style>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="••••••••"
-            />
-          </div>
+      {/* Radial glow */}
+      <div style={{ position: "fixed", top: "30%", left: "50%", transform: "translateX(-50%)", width: "80vw", height: "60vh", background: "radial-gradient(ellipse at center, rgba(139,0,20,0.18) 0%, transparent 70%)", pointerEvents: "none", zIndex: 0 }} />
 
-          {error && (
-            <p className="text-red-400 text-sm">{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {loading ? "Creating account..." : "Create Account"}
-          </button>
-
-          <p className="text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link href="/login" className="text-primary hover:underline">
-              Log in
-            </Link>
-          </p>
-        </form>
+      {/* Waveform */}
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: "160px", pointerEvents: "none", zIndex: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", gap: "3px", padding: "0 2rem", opacity: 0.08 }}>
+        {Array.from({ length: 80 }).map((_, i) => (
+          <div key={i} style={{ flex: 1, background: "#c8102e", borderRadius: "2px 2px 0 0", animation: `wave${i % 8} ${1.5 + (i % 5) * 0.3}s ease-in-out infinite alternate`, animationDelay: `${(i % 7) * 0.15}s` }} />
+        ))}
       </div>
+
+      {/* Nav */}
+      <nav style={{ padding: "1.5rem 3rem", display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", zIndex: 10 }}>
+        <Link href="/" style={{ fontSize: "1.4rem", fontWeight: "700", letterSpacing: "0.12em", color: "#c8102e", textTransform: "uppercase", textDecoration: "none" }}>W∆LVR</Link>
+        <Link href="/login" style={{ fontSize: "0.75rem", letterSpacing: "0.15em", textTransform: "uppercase", color: "rgba(245,240,235,0.4)", textDecoration: "none", border: "1px solid rgba(255,255,255,0.08)", padding: "0.6rem 1.25rem" }}>Sign In</Link>
+      </nav>
+
+      {/* Form */}
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem 3rem", position: "relative", zIndex: 10 }}>
+        <div style={{ width: "100%", maxWidth: "420px" }}>
+
+          <div style={{ marginBottom: "3rem" }}>
+            <p style={{ fontSize: "0.7rem", letterSpacing: "0.3em", textTransform: "uppercase", color: "#c8102e", marginBottom: "0.75rem" }}>Get Started Free</p>
+            <h1 style={{ fontSize: "2.5rem", fontWeight: "700", color: "#f5f0eb", letterSpacing: "-0.02em", lineHeight: "1.1" }}>Create Account</h1>
+          </div>
+
+          <form onSubmit={handleSignup} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+            <div>
+              <label style={{ fontSize: "0.65rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(245,240,235,0.35)", display: "block", marginBottom: "0.6rem" }}>Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="you@example.com"
+                style={{ width: "100%", padding: "1rem 1.25rem", background: "rgba(20,5,8,0.7)", border: "1px solid rgba(200,16,46,0.2)", color: "#f5f0eb", fontSize: "1rem", fontFamily: "'Georgia', serif", boxSizing: "border-box" }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: "0.65rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(245,240,235,0.35)", display: "block", marginBottom: "0.6rem" }}>Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                placeholder="••••••••"
+                style={{ width: "100%", padding: "1rem 1.25rem", background: "rgba(20,5,8,0.7)", border: "1px solid rgba(200,16,46,0.2)", color: "#f5f0eb", fontSize: "1rem", fontFamily: "'Georgia', serif", boxSizing: "border-box" }}
+              />
+            </div>
+
+            {error && (
+              <p style={{ color: "#c8102e", fontSize: "0.8rem", letterSpacing: "0.05em" }}>{error}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              style={{ padding: "1rem", background: "#8b0014", color: "#f5f0eb", border: "1px solid rgba(200,16,46,0.6)", fontSize: "0.8rem", letterSpacing: "0.2em", textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "'Georgia', serif", marginTop: "0.5rem" }}
+            >
+              {loading ? "Creating Account..." : "Create Account →"}
+            </button>
+          </form>
+
+          <p style={{ marginTop: "2rem", fontSize: "0.8rem", color: "rgba(245,240,235,0.3)", textAlign: "center" }}>
+            Already have an account?{" "}
+            <Link href="/login" style={{ color: "#c8102e", textDecoration: "none" }}>Sign in</Link>
+          </p>
+
+        </div>
+      </div>
+
     </main>
   );
 }
