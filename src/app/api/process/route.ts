@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     videoId = body.videoId;
-    const { fileUrl, title, artist, captionStyle, userId, vibe } = body;
+    const { fileUrl, title, artist, captionStyle, userId, templateId } = body;
 
     // Get user plan
     const { data: profile } = await supabase
@@ -62,7 +62,18 @@ export async function POST(request: Request) {
       })
       .eq("id", videoId);
 
-    const clips = await pickClips(analysis.mood, analysis.energy, vibe);
+   // Get template settings
+    const { data: template } = await supabase
+      .from("templates")
+      .select("*")
+      .eq("id", templateId)
+      .single();
+
+    const clips = await pickClips(
+      template?.clip_mood ?? analysis.mood,
+      template?.clip_energy ?? analysis.energy,
+      template?.background_type
+    );
 
     const render = await startRender({
       videoId,
@@ -173,16 +184,11 @@ Return exactly:
   }
 }
 
-async function pickClips(mood: string, energy: string, vibe?: string) {
+async function pickClips(mood: string, energy: string, backgroundType?: string) {
   // Try vibe match first
-  if (vibe) {
-    const vibeLabel = vibe.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const { data: vibeClips } = await supabase
-      .from("clips")
-      .select("*")
-      .eq("vibe", vibeLabel)
-      .limit(10);
-    if (vibeClips && vibeClips.length > 0) return vibeClips;
+ if (backgroundType === "color-block" || backgroundType === "dark-solid") {
+    const { data } = await supabase.from("clips").select("*").limit(10);
+    return data ?? [];
   }
 
   // Fallback to mood + energy
@@ -402,9 +408,10 @@ async function startRender({
 }
 
 async function checkUsageLimit(userId: string, plan: string): Promise<boolean> {
-  const limits: Record<string, number> = {
+ const limits: Record<string, number> = {
     free: 3,
-    pro: 20,
+    starter: 10,
+    pro: Infinity,
     business: Infinity,
   };
 
