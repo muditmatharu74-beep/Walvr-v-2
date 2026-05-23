@@ -19,7 +19,6 @@ export async function POST(request: Request) {
     videoId = body.videoId;
     const { fileUrl, title, artist, captionStyle, userId, templateId } = body;
 
-    // Get user plan
     const { data: profile } = await supabase
       .from("profiles")
       .select("plan")
@@ -28,28 +27,17 @@ export async function POST(request: Request) {
 
     const plan = profile?.plan ?? "free";
 
-    // Check usage limit
     const withinLimit = await checkUsageLimit(userId, plan);
     if (!withinLimit) {
-      await supabase
-        .from("videos")
-        .update({ status: "error" })
-        .eq("id", videoId);
+      await supabase.from("videos").update({ status: "error" }).eq("id", videoId);
       return NextResponse.json({ error: "Usage limit reached" }, { status: 403 });
     }
 
-    await supabase
-      .from("videos")
-      .update({ status: "processing" })
-      .eq("id", videoId);
+    await supabase.from("videos").update({ status: "processing" }).eq("id", videoId);
 
     const transcription = await transcribeAudio(fileUrl);
 
-    const analysis = await analyzeWithClaude({
-      title,
-      artist,
-      lyrics: transcription.text,
-    });
+    const analysis = await analyzeWithClaude({ title, artist, lyrics: transcription.text });
 
     await supabase
       .from("videos")
@@ -62,7 +50,6 @@ export async function POST(request: Request) {
       })
       .eq("id", videoId);
 
-   // Get template settings
     const { data: template } = await supabase
       .from("templates")
       .select("*")
@@ -85,6 +72,7 @@ export async function POST(request: Request) {
       fileUrl,
       clips,
       plan,
+      template,
     });
 
     await incrementUsage(userId);
@@ -98,10 +86,7 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("Process error:", err);
     if (videoId) {
-      await supabase
-        .from("videos")
-        .update({ status: "error" })
-        .eq("id", videoId);
+      await supabase.from("videos").update({ status: "error" }).eq("id", videoId);
     }
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
@@ -118,14 +103,11 @@ async function transcribeAudio(fileUrl: string) {
   formData.append("response_format", "verbose_json");
   formData.append("timestamp_granularities[]", "word");
 
-  const whisperRes = await fetch(
-    "https://api.openai.com/v1/audio/transcriptions",
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: formData,
-    }
-  );
+  const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: formData,
+  });
 
   if (!whisperRes.ok) throw new Error("Whisper transcription failed");
   return whisperRes.json();
@@ -166,8 +148,7 @@ Return exactly:
     ],
   });
 
-  const text =
-    message.content[0].type === "text" ? message.content[0].text : "{}";
+  const text = message.content[0].type === "text" ? message.content[0].text : "{}";
   try {
     return JSON.parse(text);
   } catch {
@@ -185,13 +166,10 @@ Return exactly:
 }
 
 async function pickClips(mood: string, energy: string, backgroundType?: string) {
-  // Try vibe match first
- if (backgroundType === "color-block" || backgroundType === "dark-solid") {
-    const { data } = await supabase.from("clips").select("*").limit(10);
-    return data ?? [];
+  if (backgroundType === "color-block" || backgroundType === "dark-solid") {
+    return [];
   }
 
-  // Fallback to mood + energy
   let { data: clips } = await supabase
     .from("clips")
     .select("*")
@@ -200,11 +178,7 @@ async function pickClips(mood: string, energy: string, backgroundType?: string) 
     .limit(10);
 
   if (!clips || clips.length === 0) {
-    const { data } = await supabase
-      .from("clips")
-      .select("*")
-      .eq("mood", mood)
-      .limit(10);
+    const { data } = await supabase.from("clips").select("*").eq("mood", mood).limit(10);
     clips = data;
   }
 
@@ -214,6 +188,16 @@ async function pickClips(mood: string, energy: string, backgroundType?: string) 
   }
 
   return clips ?? [];
+}
+
+function generateBeatTimestamps(songDuration: number, cutInterval: number): number[] {
+  const beats: number[] = [];
+  let t = 0;
+  while (t < songDuration) {
+    beats.push(parseFloat(t.toFixed(2)));
+    t += cutInterval;
+  }
+  return beats;
 }
 
 async function startRender({
@@ -226,6 +210,7 @@ async function startRender({
   fileUrl,
   clips,
   plan,
+  template,
 }: {
   videoId: string;
   analysis: Record<string, unknown>;
@@ -236,38 +221,90 @@ async function startRender({
   fileUrl: string;
   clips: Array<{ url: string }>;
   plan: string;
+  template: Record<string, unknown> | null;
 }) {
-  const songDuration = captions.length > 0
-    ? captions[captions.length - 1].end + 1
-    : 30;
-
+  const songDuration = captions.length > 0 ? captions[captions.length - 1].end + 1 : 30;
   const cutInterval = (analysis.cutInterval as number) ?? 4;
-  const availableClips = clips.length > 0 ? clips : [{ url: "" }];
+  const backgroundType = template?.background_type as string ?? "";
+  const isColorBlock = backgroundType === "color-block";
+  const isDarkSolid = backgroundType === "dark-solid";
 
-  const segments: { url: string; start: number; duration: number }[] = [];
-  let currentTime = 0;
-  let clipIndex = 0;
+  // Color palettes per mood
+  const colorPalettes: Record<string, string[]> = {
+    energetic: ["#0a0a0a", "#1a0010", "#000d1a", "#0d0a00", "#1a0800", "#001a10"],
+    dark: ["#0a0a0a", "#0d0005", "#050010", "#0a0500", "#000a0d", "#0d0500"],
+    sad: ["#070710", "#050a12", "#080510", "#040810", "#06080f", "#080608"],
+    romantic: ["#150008", "#0d0010", "#100005", "#0d0508", "#150005", "#0a0010"],
+    aggressive: ["#1a0000", "#0d0000", "#1a0500", "#0d0800", "#150000", "#0a0000"],
+    chill: ["#000d0d", "#00080d", "#000a08", "#00060d", "#000d0a", "#000810"],
+    uplifting: ["#0d0d00", "#0a0d00", "#0d0a00", "#080d00", "#0a0800", "#0d0800"],
+    default: ["#0a0a0a", "#1a0010", "#000d1a", "#0d0a00", "#1a0800", "#001a10"],
+  };
 
-  while (currentTime < songDuration) {
-    const segmentDuration = Math.min(cutInterval, songDuration - currentTime);
-    segments.push({
-      url: availableClips[clipIndex % availableClips.length].url,
-      start: currentTime,
-      duration: segmentDuration,
-    });
-    currentTime += segmentDuration;
-    clipIndex++;
+  const mood = (analysis.mood as string) ?? "default";
+  const colors = colorPalettes[mood] ?? colorPalettes.default;
+  const beats = generateBeatTimestamps(songDuration, cutInterval);
+
+  // Background elements
+  let backgroundElements: object[] = [];
+
+  if (isColorBlock) {
+    backgroundElements = beats.map((beat, i) => ({
+      name: `bg-${i}`,
+      type: "rectangle",
+      track: 1,
+      time: beat,
+      duration: cutInterval + 0.05,
+      width: "100%",
+      height: "100%",
+      x: "50%",
+      y: "50%",
+      x_anchor: "50%",
+      y_anchor: "50%",
+      fill_color: colors[i % colors.length],
+    }));
+  } else if (isDarkSolid) {
+    backgroundElements = [{
+      name: "bg-solid",
+      type: "rectangle",
+      track: 1,
+      time: 0,
+      duration: songDuration,
+      width: "100%",
+      height: "100%",
+      x: "50%",
+      y: "50%",
+      x_anchor: "50%",
+      y_anchor: "50%",
+      fill_color: "#000000",
+    }];
+  } else {
+    const availableClips = clips.length > 0 ? clips : [{ url: "" }];
+    const segments: { url: string; start: number; duration: number }[] = [];
+    let currentTime = 0;
+    let clipIndex = 0;
+
+    while (currentTime < songDuration) {
+      const segmentDuration = Math.min(cutInterval, songDuration - currentTime);
+      segments.push({
+        url: availableClips[clipIndex % availableClips.length].url,
+        start: currentTime,
+        duration: segmentDuration,
+      });
+      currentTime += segmentDuration;
+      clipIndex++;
+    }
+
+    backgroundElements = segments.map((seg, index) => ({
+      name: `clip-${index}`,
+      type: "video",
+      track: 1,
+      time: seg.start,
+      duration: seg.duration,
+      source: seg.url,
+      fit: "cover",
+    }));
   }
-
-  const videoElements = segments.map((seg, index) => ({
-    name: `clip-${index}`,
-    type: "video",
-    track: 1,
-    time: seg.start,
-    duration: seg.duration,
-    source: seg.url,
-    fit: "cover",
-  }));
 
   const captionElements = captions.map((word, index) => {
     const base = {
@@ -299,7 +336,6 @@ async function startRender({
           background_y_padding: "4%",
           background_border_radius: "2%",
         };
-
       case "frosted":
         return {
           ...base,
@@ -312,7 +348,6 @@ async function startRender({
           stroke_color: "#ffffff",
           stroke_width: "2px",
         };
-
       case "minimal":
         return {
           ...base,
@@ -323,7 +358,6 @@ async function startRender({
           font_size: 70,
           fill_color: "rgba(255,255,255,0.85)",
         };
-
       case "karaoke":
         return {
           ...base,
@@ -336,7 +370,6 @@ async function startRender({
           stroke_color: "#ffffff",
           stroke_width: "3px",
         };
-
       case "bold-overlay":
       default:
         return {
@@ -362,7 +395,7 @@ async function startRender({
     y_anchor: "50%",
     width: "90%",
     height: "auto",
-    text: "Made with Wavlr",
+    text: "Made with Walvr",
     font_family: "Montserrat",
     font_weight: "600",
     font_size: 40,
@@ -382,7 +415,7 @@ async function startRender({
         width: 1080,
         height: 1920,
         elements: [
-          ...videoElements,
+          ...backgroundElements,
           {
             name: "audio",
             type: "audio",
@@ -408,7 +441,7 @@ async function startRender({
 }
 
 async function checkUsageLimit(userId: string, plan: string): Promise<boolean> {
- const limits: Record<string, number> = {
+  const limits: Record<string, number> = {
     free: 3,
     starter: 10,
     pro: Infinity,
