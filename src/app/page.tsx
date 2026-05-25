@@ -64,7 +64,7 @@ export default function HomePage() {
             letterSpacing: "0.1em",
             textTransform: "uppercase",
           }}>Sign In</Link>
-          <Link href="/signup" style={{
+          <Link href="/get-started" style={{
             padding: "0.6rem 1.5rem",
             background: "#8b0014",
             color: "white",
@@ -242,7 +242,7 @@ export default function HomePage() {
           </p>
 
           <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-            <Link href="/signup" style={{
+            <Link href="/get-started" style={{
               padding: "1rem 2.5rem",
               background: "#8b0014",
               color: "#f5f0eb",
@@ -434,7 +434,7 @@ export default function HomePage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/signup" style={{
+              <Link href="/get-started" style={{
                 display: "block",
                 textAlign: "center",
                 padding: "0.9rem",
