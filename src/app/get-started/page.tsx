@@ -175,7 +175,7 @@ export default function GetStartedPage() {
 
             <div style={{
               display: "grid",
-              gridTemplateColumns: QUIZ[quizStep].options.length > 4 ? "repeat(auto-fill, minmax(180px, 1fr))" : "repeat(auto-fill, minmax(220px, 1fr))",
+             gridTemplateColumns: QUIZ[quizStep].options.length > 4 ? "repeat(auto-fill, minmax(220px, 1fr))" : "1fr",
               gap: "1px",
               background: "rgba(200,16,46,0.08)",
               border: "1px solid rgba(200,16,46,0.08)",
@@ -185,7 +185,7 @@ export default function GetStartedPage() {
                   key={opt.value}
                   onClick={() => handleAnswer(QUIZ[quizStep].id, opt.value)}
                   style={{
-                    padding: "1.75rem 1.5rem",
+                    padding: "2.25rem 2rem",
                     background: "rgba(13,3,5,0.5)",
                     border: "none",
                     borderLeft: "2px solid transparent",
@@ -206,8 +206,8 @@ export default function GetStartedPage() {
                   <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.4rem" }}>
                     <span style={{ fontSize: "0.65rem", letterSpacing: "0.15em", color: "#c8102e", border: "1px solid rgba(200,16,46,0.3)", padding: "0.15rem 0.5rem" }}>{opt.tag}</span>
                   </div>
-                  <p style={{ fontSize: "0.95rem", fontWeight: "600", color: "#f5f0eb", marginBottom: "0.3rem" }}>{opt.label}</p>
-                  <p style={{ fontSize: "0.72rem", color: "rgba(245,240,235,0.35)", lineHeight: "1.4" }}>{opt.desc}</p>
+                  <p style={{ fontSize: "1.2rem", fontWeight: "600", color: "#f5f0eb", marginBottom: "0.5rem" }}>{opt.label}</p>
+                  <p style={{ fontSize: "0.9rem", color: "rgba(245,240,235,0.4)", lineHeight: "1.5" }}>{opt.desc}</p>
                 </button>
               ))}
             </div>
