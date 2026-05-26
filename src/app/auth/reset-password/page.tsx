@@ -12,6 +12,16 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.onAuthStateChange(async (event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setReady(true);
+      }
+    });
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,7 +60,20 @@ export default function ResetPasswordPage() {
 
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem 3rem", position: "relative", zIndex: 10 }}>
         <div style={{ width: "100%", maxWidth: "420px" }}>
-          {!done ? (
+          {done ? (
+            <div style={{ textAlign: "center" }}>
+              <p style={{ fontSize: "0.7rem", letterSpacing: "0.3em", textTransform: "uppercase", color: "#c8102e", marginBottom: "1rem" }}>Success</p>
+              <h1 style={{ fontSize: "2.5rem", fontWeight: "700", color: "#f5f0eb", letterSpacing: "-0.02em", lineHeight: "1.1", marginBottom: "1rem" }}>Password updated.</h1>
+              <p style={{ color: "rgba(245,240,235,0.4)", fontSize: "0.9rem" }}>Redirecting you to dashboard...</p>
+            </div>
+          ) : !ready ? (
+            <div style={{ textAlign: "center" }}>
+              <p style={{ fontSize: "0.7rem", letterSpacing: "0.3em", textTransform: "uppercase", color: "#c8102e", marginBottom: "1rem" }}>One moment</p>
+              <h1 style={{ fontSize: "2rem", fontWeight: "700", color: "#f5f0eb", letterSpacing: "-0.02em", lineHeight: "1.1", marginBottom: "1rem" }}>Verifying your link...</h1>
+              <p style={{ color: "rgba(245,240,235,0.4)", fontSize: "0.9rem" }}>If this takes too long, try requesting a new reset link.</p>
+              <Link href="/forgot-password" style={{ display: "inline-block", marginTop: "1.5rem", color: "#c8102e", fontSize: "0.8rem", letterSpacing: "0.15em", textTransform: "uppercase", textDecoration: "none" }}>Request New Link →</Link>
+            </div>
+          ) : (
             <>
               <div style={{ marginBottom: "3rem" }}>
                 <p style={{ fontSize: "0.7rem", letterSpacing: "0.3em", textTransform: "uppercase", color: "#c8102e", marginBottom: "0.75rem" }}>New Password</p>
@@ -74,12 +97,6 @@ export default function ResetPasswordPage() {
                 </button>
               </form>
             </>
-          ) : (
-            <div style={{ textAlign: "center" }}>
-              <p style={{ fontSize: "0.7rem", letterSpacing: "0.3em", textTransform: "uppercase", color: "#c8102e", marginBottom: "1rem" }}>Success</p>
-              <h1 style={{ fontSize: "2.5rem", fontWeight: "700", color: "#f5f0eb", letterSpacing: "-0.02em", lineHeight: "1.1", marginBottom: "1rem" }}>Password updated.</h1>
-              <p style={{ color: "rgba(245,240,235,0.4)", fontSize: "0.9rem" }}>Redirecting you to dashboard...</p>
-            </div>
           )}
         </div>
       </div>
