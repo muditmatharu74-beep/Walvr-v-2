@@ -15,9 +15,9 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     setError("");
     const supabase = createClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-password`,
-    });
+   const { error } = await supabase.auth.resetPasswordForEmail(email, {
+   redirectTo: `https://walvr-v-2-git-main-muditmatharu74-7176s-projects.vercel.app/auth/reset-password`,
+});
     if (error) { setError(error.message); setLoading(false); return; }
     setSent(true);
     setLoading(false);
