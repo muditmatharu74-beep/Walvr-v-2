@@ -16,11 +16,23 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.onAuthStateChange(async (event) => {
-      if (event === "PASSWORD_RECOVERY") {
+
+    // Check if we already have a session from the reset link
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setReady(true);
+        return;
+      }
+    });
+
+    // Also listen for the PASSWORD_RECOVERY event
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session)) {
         setReady(true);
       }
     });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -70,8 +82,8 @@ export default function ResetPasswordPage() {
             <div style={{ textAlign: "center" }}>
               <p style={{ fontSize: "0.7rem", letterSpacing: "0.3em", textTransform: "uppercase", color: "#c8102e", marginBottom: "1rem" }}>One moment</p>
               <h1 style={{ fontSize: "2rem", fontWeight: "700", color: "#f5f0eb", letterSpacing: "-0.02em", lineHeight: "1.1", marginBottom: "1rem" }}>Verifying your link...</h1>
-              <p style={{ color: "rgba(245,240,235,0.4)", fontSize: "0.9rem" }}>If this takes too long, try requesting a new reset link.</p>
-              <Link href="/forgot-password" style={{ display: "inline-block", marginTop: "1.5rem", color: "#c8102e", fontSize: "0.8rem", letterSpacing: "0.15em", textTransform: "uppercase", textDecoration: "none" }}>Request New Link →</Link>
+              <p style={{ color: "rgba(245,240,235,0.4)", fontSize: "0.9rem", marginBottom: "1.5rem" }}>If this takes too long, try requesting a new reset link.</p>
+              <Link href="/forgot-password" style={{ display: "inline-block", color: "#c8102e", fontSize: "0.8rem", letterSpacing: "0.15em", textTransform: "uppercase", textDecoration: "none" }}>Request New Link →</Link>
             </div>
           ) : (
             <>
