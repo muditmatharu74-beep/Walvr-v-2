@@ -8,14 +8,34 @@ export default function HomePage() {
   const [mounted, setMounted] = useState(false);
   const [navSolid, setNavSolid] = useState(false);
 
-  useEffect(() => {
+useEffect(() => {
     setMounted(true);
     const handleScroll = () => {
       setScrollY(window.scrollY);
       setNavSolid(window.scrollY > 50);
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            (entry.target as HTMLElement).style.opacity = "1";
+            (entry.target as HTMLElement).style.transform = "translateY(0)";
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    setTimeout(() => {
+      document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
+    }, 200);
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      observer.disconnect();
+    };
   }, []);
 
   const cdRotation = scrollY * 0.3;
