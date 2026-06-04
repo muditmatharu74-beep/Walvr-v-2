@@ -50,11 +50,22 @@ export async function POST(request: Request) {
       })
       .eq("id", videoId);
 
-    const { data: template } = await supabase
+      const { data: template } = await supabase
       .from("templates")
       .select("*")
       .eq("id", templateId)
       .single();
+
+    // Check if user's plan allows this template
+    if (template) {
+      const planOrder = ["free", "starter", "pro", "business"];
+      const userPlanIndex = planOrder.indexOf(plan);
+      const templatePlanIndex = planOrder.indexOf(template.plan_required);
+      if (userPlanIndex < templatePlanIndex) {
+        await supabase.from("videos").update({ status: "error" }).eq("id", videoId);
+        return NextResponse.json({ error: "Template not available on your plan" }, { status: 403 });
+      }
+    }
 
     const clips = await pickClips(
       template?.clip_mood ?? analysis.mood,
