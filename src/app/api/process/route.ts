@@ -280,7 +280,8 @@ async function startRender({
   if (isColorBlock) {
     backgroundElements = beats.map((beat, i) => ({
       name: `bg-${i}`,
-      type: "rectangle",
+      type: "shape",
+      shape: "rectangle",
       track: 1,
       time: beat,
       duration: cutInterval + 0.05,
@@ -295,7 +296,8 @@ async function startRender({
   } else if (isDarkSolid) {
     backgroundElements = [{
       name: "bg-solid",
-      type: "rectangle",
+      type: "shape",
+      shape: "rectangle",
       track: 1,
       time: 0,
       duration: songDuration,
