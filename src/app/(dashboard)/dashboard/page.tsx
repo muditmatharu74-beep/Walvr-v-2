@@ -77,7 +77,7 @@ export default function DashboardPage() {
   const stats = [
     { label: "Total Videos", value: String(videos.length) },
     { label: "Completed", value: String(videos.filter((v) => v.status === "done").length) },
-    { label: "Rendering", value: String(videos.filter((v) => v.status === "rendering" || v.status === "processing").length) },
+    { label: "Credits", value: String(profile?.credits ?? 0) },
     { label: "Plan", value: plan.charAt(0).toUpperCase() + plan.slice(1) },
   ];
 
