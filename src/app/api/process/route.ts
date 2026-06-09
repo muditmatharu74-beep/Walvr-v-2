@@ -261,14 +261,14 @@ async function startRender({
   const isDarkSolid = backgroundType === "dark-solid";
 
   const colorPalettes: Record<string, string[]> = {
-    energetic: ["#0a0a0a", "#1a0010", "#000d1a", "#0d0a00", "#1a0800", "#001a10"],
-    dark: ["#0a0a0a", "#0d0005", "#050010", "#0a0500", "#000a0d", "#0d0500"],
-    sad: ["#070710", "#050a12", "#080510", "#040810", "#06080f", "#080608"],
-    romantic: ["#150008", "#0d0010", "#100005", "#0d0508", "#150005", "#0a0010"],
-    aggressive: ["#1a0000", "#0d0000", "#1a0500", "#0d0800", "#150000", "#0a0000"],
-    chill: ["#000d0d", "#00080d", "#000a08", "#00060d", "#000d0a", "#000810"],
-    uplifting: ["#0d0d00", "#0a0d00", "#0d0a00", "#080d00", "#0a0800", "#0d0800"],
-    default: ["#0a0a0a", "#1a0010", "#000d1a", "#0d0a00", "#1a0800", "#001a10"],
+    energetic: ["#1a0a2e", "#0a1a2e", "#2e0a1a", "#0a2e1a", "#2e1a0a", "#1a2e0a"],
+    dark: ["#1a0a0a", "#0a0a1a", "#1a1a0a", "#0a1a1a", "#150a15", "#0a150a"],
+    sad: ["#0a0a2e", "#0a2e2e", "#2e0a2e", "#0a1a2e", "#1a0a2e", "#2e2e0a"],
+    romantic: ["#2e0a1a", "#1a0a2e", "#2e1a0a", "#0a2e1a", "#1a2e0a", "#0a0a2e"],
+    aggressive: ["#2e0a0a", "#1a0a0a", "#2e1a0a", "#1a2e0a", "#0a0a2e", "#2e0a1a"],
+    chill: ["#0a1a2e", "#0a2e1a", "#1a0a2e", "#2e1a0a", "#0a2e2e", "#1a2e2e"],
+    uplifting: ["#1a2e0a", "#2e1a0a", "#0a1a2e", "#2e0a1a", "#1a0a2e", "#0a2e1a"],
+    default: ["#1a0a2e", "#0a1a2e", "#2e0a1a", "#0a2e1a", "#2e1a0a", "#1a2e0a"],
   };
 
   const mood = (analysis.mood as string) ?? "default";
