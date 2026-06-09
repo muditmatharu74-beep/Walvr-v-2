@@ -21,16 +21,37 @@ export async function POST(request: Request) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("plan")
+      .select("plan, credits")
       .eq("id", userId)
       .single();
 
     const plan = profile?.plan ?? "free";
+    const currentCredits = profile?.credits ?? 0;
 
-    const withinLimit = await checkUsageLimit(userId, plan);
-    if (!withinLimit) {
+    const { data: template } = await supabase
+      .from("templates")
+      .select("*")
+      .eq("id", templateId)
+      .single();
+
+    // Check if user's plan allows this template
+    if (template) {
+      const planOrder = ["free", "starter", "pro", "business", "studio"];
+      const userPlanIndex = planOrder.indexOf(plan);
+      const templatePlanIndex = planOrder.indexOf(template.plan_required);
+      if (userPlanIndex < templatePlanIndex) {
+        await supabase.from("videos").update({ status: "error" }).eq("id", videoId);
+        return NextResponse.json({ error: "Template not available on your plan" }, { status: 403 });
+      }
+    }
+
+    // Calculate credit cost
+    const creditCost = getCreditCost(plan, template?.background_type, captionStyle);
+
+    // Check if user has enough credits
+    if (currentCredits < creditCost) {
       await supabase.from("videos").update({ status: "error" }).eq("id", videoId);
-      return NextResponse.json({ error: "Usage limit reached" }, { status: 403 });
+      return NextResponse.json({ error: "Not enough credits. Top up to continue.", credits: currentCredits, required: creditCost }, { status: 403 });
     }
 
     await supabase.from("videos").update({ status: "processing" }).eq("id", videoId);
@@ -49,23 +70,6 @@ export async function POST(request: Request) {
         status: "rendering",
       })
       .eq("id", videoId);
-
-      const { data: template } = await supabase
-      .from("templates")
-      .select("*")
-      .eq("id", templateId)
-      .single();
-
-    // Check if user's plan allows this template
-    if (template) {
-      const planOrder = ["free", "starter", "pro", "business"];
-      const userPlanIndex = planOrder.indexOf(plan);
-      const templatePlanIndex = planOrder.indexOf(template.plan_required);
-      if (userPlanIndex < templatePlanIndex) {
-        await supabase.from("videos").update({ status: "error" }).eq("id", videoId);
-        return NextResponse.json({ error: "Template not available on your plan" }, { status: 403 });
-      }
-    }
 
     const clips = await pickClips(
       template?.clip_mood ?? analysis.mood,
@@ -86,6 +90,12 @@ export async function POST(request: Request) {
       template,
     });
 
+    // Deduct credits
+    await supabase
+      .from("profiles")
+      .update({ credits: currentCredits - creditCost })
+      .eq("id", userId);
+
     await incrementUsage(userId);
 
     await supabase
@@ -93,7 +103,7 @@ export async function POST(request: Request) {
       .update({ render_id: render.id, status: "rendering" })
       .eq("id", videoId);
 
-    return NextResponse.json({ success: true, renderId: render.id });
+    return NextResponse.json({ success: true, renderId: render.id, creditsRemaining: currentCredits - creditCost });
   } catch (err) {
     console.error("Process error:", err);
     if (videoId) {
@@ -101,6 +111,16 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
+}
+
+function getCreditCost(plan: string, backgroundType?: string, captionStyle?: string): number {
+  const isPremiumPlan = plan === "business" || plan === "studio";
+  const isBasicTemplate = backgroundType === "color-block" || backgroundType === "dark-solid";
+  const isBasicCaption = captionStyle === "bold-overlay" || captionStyle === "minimal";
+
+  if (isPremiumPlan) return 350;
+  if (isBasicTemplate && isBasicCaption) return 100;
+  return 200;
 }
 
 async function transcribeAudio(fileUrl: string) {
@@ -240,7 +260,6 @@ async function startRender({
   const isColorBlock = backgroundType === "color-block";
   const isDarkSolid = backgroundType === "dark-solid";
 
-  // Color palettes per mood
   const colorPalettes: Record<string, string[]> = {
     energetic: ["#0a0a0a", "#1a0010", "#000d1a", "#0d0a00", "#1a0800", "#001a10"],
     dark: ["#0a0a0a", "#0d0005", "#050010", "#0a0500", "#000a0d", "#0d0500"],
@@ -256,7 +275,6 @@ async function startRender({
   const colors = colorPalettes[mood] ?? colorPalettes.default;
   const beats = generateBeatTimestamps(songDuration, cutInterval);
 
-  // Background elements
   let backgroundElements: object[] = [];
 
   if (isColorBlock) {
@@ -395,6 +413,10 @@ async function startRender({
     }
   });
 
+  const isPremiumPlan = plan === "business" || plan === "studio";
+  const width = isPremiumPlan ? 2160 : 1080;
+  const height = isPremiumPlan ? 3840 : 1920;
+
   const watermarkElements = plan === "free" ? [{
     name: "watermark",
     type: "text",
@@ -423,8 +445,8 @@ async function startRender({
     body: JSON.stringify({
       source: {
         output_format: "mp4",
-        width: 1080,
-        height: 1920,
+        width,
+        height,
         elements: [
           ...backgroundElements,
           {
@@ -457,6 +479,7 @@ async function checkUsageLimit(userId: string, plan: string): Promise<boolean> {
     starter: 10,
     pro: Infinity,
     business: Infinity,
+    studio: Infinity,
   };
 
   const limit = limits[plan] ?? 3;
