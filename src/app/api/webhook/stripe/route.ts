@@ -36,12 +36,14 @@ export async function POST(request: Request) {
       const priceId = subscription.items.data[0].price.id;
 
       let plan = "free";
-      if (priceId === process.env.STRIPE_PRO_PRICE_ID) plan = "pro";
-      if (priceId === process.env.STRIPE_BUSINESS_PRICE_ID) plan = "business";
+      let credits = 0;
+      if (priceId === process.env.STRIPE_STARTER_PRICE_ID) { plan = "starter"; credits = 1500; }
+      if (priceId === process.env.STRIPE_PRO_PRICE_ID) { plan = "pro"; credits = 3000; }
+      if (priceId === process.env.STRIPE_BUSINESS_PRICE_ID) { plan = "business"; credits = 8000; }
 
       await supabase
         .from("profiles")
-        .update({ plan, stripe_subscription_id: subscription.id })
+        .update({ plan, stripe_subscription_id: subscription.id, credits })
         .eq("stripe_customer_id", customerId);
 
       break;
