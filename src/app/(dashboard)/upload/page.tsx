@@ -26,14 +26,16 @@ export default function UploadPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [userPlan, setUserPlan] = useState("free");
+  const [userCredits, setUserCredits] = useState(0);
 
   useEffect(() => {
     async function load() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+      const { data: profile } = await supabase.from("profiles").select("plan, credits").eq("id", user.id).single();
       setUserPlan(profile?.plan ?? "free");
+      setUserCredits(profile?.credits ?? 0);
       const { data: tmpl } = await supabase.from("templates").select("*").eq("active", true).order("sort_order");
       setTemplates(tmpl ?? []);
     }
@@ -164,7 +166,9 @@ export default function UploadPage() {
             {step === "caption" && "Pick how your lyrics appear on screen."}
           </p>
         </div>
-
+        <p style={{ fontSize: "0.75rem", color: "rgba(245,240,235,0.3)", textAlign: "right" }}>
+                  Your balance: <span style={{ color: "#f5f0eb" }}>{userCredits} credits</span>
+                </p>
         <div style={{ display: "flex", gap: "6px", marginBottom: "3rem" }}>
           {steps.map((s, i) => (
             <div key={s} style={{ flex: 1, height: "2px", background: i <= stepIndex ? "#c8102e" : "rgba(255,255,255,0.08)", transition: "background 0.3s" }} />
@@ -287,6 +291,10 @@ export default function UploadPage() {
         {/* Step 3 — Caption */}
         {step === "caption" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+            <p style={{ fontSize: "0.75rem", color: "rgba(245,240,235,0.3)", textAlign: "right" }}>
+              Your balance: <span style={{ color: "#f5f0eb" }}>{userCredits} credits</span>
+            </p>
+            {/* rest of caption step */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "1px", background: "rgba(200,16,46,0.08)", border: "1px solid rgba(200,16,46,0.08)" }}>
               {CAPTION_STYLES.map((style) => (
                 <button
@@ -328,9 +336,22 @@ export default function UploadPage() {
 
             <div style={{ display: "flex", gap: "1rem" }}>
               <button onClick={() => setStep("template")} style={{ flex: 1, padding: "1rem", background: "transparent", color: "rgba(245,240,235,0.4)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "0.8rem", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Georgia', serif" }}>← Back</button>
-              <button onClick={handleSubmit} disabled={loading} style={{ flex: 2, padding: "1rem", background: "#8b0014", color: "#f5f0eb", border: "1px solid rgba(200,16,46,0.6)", fontSize: "0.8rem", letterSpacing: "0.2em", textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "'Georgia', serif" }}>
-                {loading ? "Creating..." : "Create Video →"}
-              </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem", background: "rgba(139,0,20,0.1)", border: "1px solid rgba(200,16,46,0.2)" }}>
+                  <span style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(245,240,235,0.4)" }}>Credit Cost</span>
+                  <span style={{ fontSize: "1rem", fontWeight: "700", color: "#c8102e" }}>
+                    {selectedTemplate?.background_type === "color-block" || selectedTemplate?.background_type === "dark-solid"
+                      ? "100 credits"
+                      : "200 credits"}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "1rem" }}>
+                  <button onClick={() => setStep("vibe")} style={{ flex: 1, padding: "1rem", background: "transparent", color: "rgba(245,240,235,0.4)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "0.8rem", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Georgia', serif" }}>← Back</button>
+                  <button onClick={handleSubmit} disabled={loading} style={{ flex: 2, padding: "1rem", background: "#8b0014", color: "#f5f0eb", border: "1px solid rgba(200,16,46,0.6)", fontSize: "0.8rem", letterSpacing: "0.2em", textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "'Georgia', serif" }}>
+                    {loading ? "Creating..." : "Create Video →"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
