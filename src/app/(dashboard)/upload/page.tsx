@@ -104,7 +104,13 @@ export default function UploadPage() {
         }),
       });
 
-      if (res.status === 403) throw new Error("You've reached your monthly video limit. Upgrade your plan to continue.");
+      if (res.status === 403) {
+        const data = await res.json();
+        if (data.error === "Not enough credits. Top up to continue.") {
+          throw new Error(`Not enough credits. You need ${data.required} credits but only have ${data.credits}. Go to Settings to top up.`);
+        }
+        throw new Error("You've reached your limit. Upgrade your plan to continue.");
+      }
 
       router.push("/dashboard");
     } catch (err: unknown) {
