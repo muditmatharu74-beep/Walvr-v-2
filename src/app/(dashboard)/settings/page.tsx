@@ -326,7 +326,60 @@ export default function SettingsPage() {
             </div>
           </>
         )}
+       
+        {/* Top-up section */}
+        <div style={{ border: "1px solid rgba(200,16,46,0.1)", background: "rgba(13,3,5,0.5)", backdropFilter: "blur(8px)", padding: "2rem", marginBottom: "2rem" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
+            <div>
+              <p style={{ fontSize: "0.7rem", letterSpacing: "0.25em", textTransform: "uppercase", color: "rgba(245,240,235,0.3)", marginBottom: "0.4rem" }}>Credits</p>
+              <p style={{ fontSize: "2rem", fontWeight: "700", color: "#f5f0eb" }}>{profile?.credits ?? 0} <span style={{ fontSize: "0.8rem", color: "rgba(245,240,235,0.3)", fontWeight: "400" }}>remaining</span></p>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)", marginBottom: "0.25rem" }}>Basic video = 100 credits</p>
+              <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)", marginBottom: "0.25rem" }}>Standard video = 200 credits</p>
+              <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)" }}>Premium video = 350 credits</p>
+            </div>
+          </div>
 
+          <p style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(245,240,235,0.3)", marginBottom: "1rem" }}>Top Up</p>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1px", background: "rgba(200,16,46,0.08)" }}>
+            {[
+              { credits: 500, price: "$5", priceId: process.env.NEXT_PUBLIC_STRIPE_TOPUP_500_PRICE_ID ?? "" },
+              { credits: 1500, price: "$12", priceId: process.env.NEXT_PUBLIC_STRIPE_TOPUP_1500_PRICE_ID ?? "" },
+              { credits: 5000, price: "$35", priceId: process.env.NEXT_PUBLIC_STRIPE_TOPUP_5000_PRICE_ID ?? "" },
+              { credits: 12000, price: "$79", priceId: process.env.NEXT_PUBLIC_STRIPE_TOPUP_12000_PRICE_ID ?? "" },
+            ].map((pkg) => (
+              <button
+                key={pkg.credits}
+                onClick={async () => {
+                  const res = await fetch("/api/topup", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ priceId: pkg.priceId, credits: pkg.credits }),
+                  });
+                  const data = await res.json();
+                  if (data.url) window.location.href = data.url;
+                }}
+                style={{
+                  padding: "1.5rem 1rem",
+                  background: "rgba(13,3,5,0.6)",
+                  border: "none",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  transition: "background 0.2s",
+                  fontFamily: "'Georgia', serif",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(139,0,20,0.15)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(13,3,5,0.6)")}
+              >
+                <p style={{ fontSize: "1.25rem", fontWeight: "700", color: "#f5f0eb", marginBottom: "0.25rem" }}>{pkg.credits.toLocaleString()}</p>
+                <p style={{ fontSize: "0.65rem", letterSpacing: "0.15em", textTransform: "uppercase", color: "rgba(245,240,235,0.35)", marginBottom: "0.75rem" }}>credits</p>
+                <p style={{ fontSize: "0.9rem", color: "#c8102e", fontWeight: "600" }}>{pkg.price}</p>
+              </button>
+            ))}
+          </div>
+        </div>
         {/* Account section */}
         <div style={{ border: "1px solid rgba(200,16,46,0.1)", background: "rgba(13,3,5,0.5)", backdropFilter: "blur(8px)", padding: "2rem" }}>
           <p style={{ fontSize: "0.7rem", letterSpacing: "0.25em", textTransform: "uppercase", color: "rgba(245,240,235,0.3)", marginBottom: "1.5rem" }}>Account</p>
