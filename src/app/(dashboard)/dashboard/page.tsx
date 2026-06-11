@@ -261,11 +261,23 @@ export default function DashboardPage() {
                   </div>
 
                   {isDone && video.render_url && (
-                    <a href={video.render_url} target="_blank" rel="noopener noreferrer"
-                      style={{ display: "inline-block", padding: "0.6rem 1.5rem", background: "transparent", color: "#c8102e", textDecoration: "none", fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", border: "1px solid rgba(200,16,46,0.35)", transition: "all 0.2s" }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#8b0014"; (e.currentTarget as HTMLElement).style.color = "white"; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "#c8102e"; }}
-                    >Download ↓</a>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <a href={video.render_url} target="_blank" rel="noopener noreferrer"
+                        style={{ display: "inline-block", padding: "0.6rem 1.5rem", background: "transparent", color: "#c8102e", textDecoration: "none", fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", border: "1px solid rgba(200,16,46,0.35)", transition: "all 0.2s" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#8b0014"; (e.currentTarget as HTMLElement).style.color = "white"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "#c8102e"; }}
+                      >Download ↓</a>
+                      <button
+                        onClick={async () => {
+                          const supabase = createClient();
+                          await supabase.from("videos").delete().eq("id", video.id);
+                          setVideos((prev) => prev.filter((v) => v.id !== video.id));
+                        }}
+                        style={{ padding: "0.6rem 1rem", background: "transparent", color: "rgba(245,240,235,0.25)", border: "1px solid rgba(255,255,255,0.06)", fontSize: "0.7rem", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Georgia', serif", transition: "all 0.2s" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#c8102e"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(200,16,46,0.3)"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(245,240,235,0.25)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.06)"; }}
+                      >Delete</button>
+                    </div>
                   )}
 
                   {isRendering && (
