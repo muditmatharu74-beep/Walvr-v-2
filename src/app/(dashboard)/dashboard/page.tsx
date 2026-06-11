@@ -269,10 +269,11 @@ export default function DashboardPage() {
                       >Download ↓</a>
                       <button
                         onClick={async () => {
-                          const supabase = createClient();
-                          await supabase.from("videos").delete().eq("id", video.id);
-                          setVideos((prev) => prev.filter((v) => v.id !== video.id));
-                        }}
+                       if (!confirm("Are you sure you want to delete this video?")) return;
+                       const supabase = createClient();
+                       await supabase.from("videos").delete().eq("id", video.id);
+                       setVideos((prev) => prev.filter((v) => v.id !== video.id));
+                  }}
                         style={{ padding: "0.6rem 1rem", background: "transparent", color: "rgba(245,240,235,0.25)", border: "1px solid rgba(255,255,255,0.06)", fontSize: "0.7rem", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Georgia', serif", transition: "all 0.2s" }}
                         onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#c8102e"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(200,16,46,0.3)"; }}
                         onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(245,240,235,0.25)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.06)"; }}
