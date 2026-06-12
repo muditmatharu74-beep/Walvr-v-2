@@ -142,7 +142,7 @@ Upon termination, your right to use the Service ceases immediately. Unused credi
           },
           {
             title: "15. Governing Law",
-            content: `These Terms shall be governed by and construed in accordance with applicable law. Any disputes arising from these Terms shall be resolved through binding arbitration or in the courts of competent jurisdiction.`
+            content: `These Terms shall be governed by and construed in accordance with the laws of the United States. Any disputes arising from these Terms shall be resolved through binding arbitration or in the courts of competent jurisdiction in the United States.
           },
           {
             title: "16. Contact",
