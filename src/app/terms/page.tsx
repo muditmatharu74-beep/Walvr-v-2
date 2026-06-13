@@ -1,5 +1,4 @@
 import Link from "next/link";
-
 export default function TermsPage() {
   return (
     <main style={{
