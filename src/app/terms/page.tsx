@@ -1,14 +1,13 @@
 "use client";
 import Link from "next/link";
+
 export default function TermsPage() {
   return (
-    <main style={{
-      minHeight: "100vh",
-      background: "linear-gradient(160deg, #1a0508 0%, #150305 40%, #1a0609 100%)",
-      fontFamily: "'Georgia', 'Times New Roman', serif",
-      color: "#f5f0eb",
-      padding: "6rem 3rem",
-    }}>
+    <main>
+      <h1>Terms of Service</h1>
+    </main>
+  );
+}
       <div style={{ maxWidth: "800px", margin: "0 auto" }}>
 
         <Link href="/" style={{ fontSize: "1.4rem", fontWeight: "700", letterSpacing: "0.12em", color: "#c8102e", textTransform: "uppercase", textDecoration: "none", display: "block", marginBottom: "3rem" }}>W∆LVR</Link>
