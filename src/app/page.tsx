@@ -217,6 +217,8 @@ export default function HomePage() {
         <div style={{ display: "flex", gap: "2rem", alignItems: "center" }}>
           <Link href="/login" style={{ color: "rgba(245,240,235,0.25)", fontSize: "0.75rem", textDecoration: "none", letterSpacing: "0.1em", textTransform: "uppercase" }}>Sign In</Link>
           <Link href="/get-started" style={{ color: "rgba(245,240,235,0.25)", fontSize: "0.75rem", textDecoration: "none", letterSpacing: "0.1em", textTransform: "uppercase" }}>Get Started</Link>
+          <Link href="/terms" style={{ color: "rgba(245,240,235,0.25)", fontSize: "0.75rem", textDecoration: "none", letterSpacing: "0.1em", textTransform: "uppercase" }}>Terms</Link>
+          <Link href="/privacy" style={{ color: "rgba(245,240,235,0.25)", fontSize: "0.75rem", textDecoration: "none", letterSpacing: "0.1em", textTransform: "uppercase" }}>Privacy</Link>
         </div>
         <p style={{ color: "rgba(245,240,235,0.2)", fontSize: "0.75rem" }}>© 2026 Walvr. All rights reserved.</p>
       </footer>
