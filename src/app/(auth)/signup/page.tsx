@@ -11,6 +11,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [agreed, setAgreed] = useState(false);
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -106,9 +107,24 @@ export default function SignupPage() {
               <p style={{ color: "#c8102e", fontSize: "0.8rem", letterSpacing: "0.05em" }}>{error}</p>
             )}
 
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
+              <input
+                type="checkbox"
+                id="agree"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                style={{ marginTop: "3px", accentColor: "#c8102e", cursor: "pointer", width: "16px", height: "16px", flexShrink: 0 }}
+              />
+              <label htmlFor="agree" style={{ fontSize: "0.8rem", color: "rgba(245,240,235,0.4)", lineHeight: "1.5", cursor: "pointer" }}>
+                I agree to the{" "}
+                <a href="/terms" target="_blank" style={{ color: "#c8102e", textDecoration: "none" }}>Terms of Service</a>
+                {" "}and{" "}
+                <a href="/privacy" target="_blank" style={{ color: "#c8102e", textDecoration: "none" }}>Privacy Policy</a>
+              </label>
+            </div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !agreed}
               style={{ padding: "1rem", background: "#8b0014", color: "#f5f0eb", border: "1px solid rgba(200,16,46,0.6)", fontSize: "0.8rem", letterSpacing: "0.2em", textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "'Georgia', serif", marginTop: "0.5rem" }}
             >
               {loading ? "Creating Account..." : "Create Account →"}
