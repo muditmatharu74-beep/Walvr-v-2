@@ -34,7 +34,6 @@ export async function POST(request: Request) {
       .eq("id", templateId)
       .single();
 
-    // Check if user's plan allows this template
     if (template) {
       const planOrder = ["free", "starter", "pro", "business", "studio"];
       const userPlanIndex = planOrder.indexOf(plan);
@@ -45,10 +44,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // Calculate credit cost
     const creditCost = getCreditCost(plan, template?.background_type, captionStyle);
 
-    // Check if user has enough credits
     if (currentCredits < creditCost) {
       await supabase.from("videos").update({ status: "error" }).eq("id", videoId);
       return NextResponse.json({ error: "Not enough credits. Top up to continue.", credits: currentCredits, required: creditCost }, { status: 403 });
@@ -90,7 +87,6 @@ export async function POST(request: Request) {
       template,
     });
 
-    // Deduct credits
     await supabase
       .from("profiles")
       .update({ credits: currentCredits - creditCost })
@@ -164,6 +160,8 @@ async function analyzeWithClaude({
 Song: "${title}" by ${artist}
 Lyrics: ${lyrics}
 
+Estimate the song structure based on the lyrics (verses repeat themes, choruses repeat the hook/title line, bridges/drops are high energy shifts). Estimate timestamps based on typical song pacing if you cannot know exact timing.
+
 Return exactly:
 {
   "mood": "one of: energetic, dark, sad, romantic, aggressive, chill, uplifting",
@@ -173,6 +171,13 @@ Return exactly:
   "clipStyle": "one of: fast-cuts, slow-cinematic, mixed",
   "colorGrade": "one of: warm, cold, dark, vibrant, monochrome",
   "cutInterval": 4,
+  "verseInterval": 5,
+  "chorusInterval": 2,
+  "dropInterval": 1,
+  "sections": [
+    { "type": "verse", "startTime": 0, "endTime": 30 },
+    { "type": "chorus", "startTime": 30, "endTime": 50 }
+  ],
   "notes": "brief director notes"
 }`,
       },
@@ -191,6 +196,10 @@ Return exactly:
       clipStyle: "mixed",
       colorGrade: "dark",
       cutInterval: 4,
+      verseInterval: 5,
+      chorusInterval: 2,
+      dropInterval: 1,
+      sections: [],
       notes: "",
     };
   }
@@ -221,13 +230,32 @@ async function pickClips(mood: string, energy: string, backgroundType?: string) 
   return clips ?? [];
 }
 
-function generateBeatTimestamps(songDuration: number, cutInterval: number): number[] {
+function generateBeatTimestamps(
+  songDuration: number,
+  cutInterval: number,
+  sections: Array<{ type: string; startTime: number; endTime: number }>,
+  verseInterval: number,
+  chorusInterval: number,
+  dropInterval: number
+): number[] {
   const beats: number[] = [];
   let t = 0;
+
   while (t < songDuration) {
     beats.push(parseFloat(t.toFixed(2)));
-    t += cutInterval;
+
+    const currentSection = sections.find((s) => t >= s.startTime && t < s.endTime);
+
+    let interval = cutInterval;
+    if (currentSection) {
+      if (currentSection.type === "chorus") interval = chorusInterval;
+      else if (currentSection.type === "drop" || currentSection.type === "bridge") interval = dropInterval;
+      else if (currentSection.type === "verse") interval = verseInterval;
+    }
+
+    t += Math.max(0.5, interval);
   }
+
   return beats;
 }
 
@@ -256,6 +284,11 @@ async function startRender({
 }) {
   const songDuration = captions.length > 0 ? captions[captions.length - 1].end + 1 : 30;
   const cutInterval = (analysis.cutInterval as number) ?? 4;
+  const verseInterval = (analysis.verseInterval as number) ?? 5;
+  const chorusInterval = (analysis.chorusInterval as number) ?? 2;
+  const dropInterval = (analysis.dropInterval as number) ?? 1;
+  const sections = (analysis.sections as Array<{ type: string; startTime: number; endTime: number }>) ?? [];
+
   const backgroundType = template?.background_type as string ?? "";
   const isColorBlock = backgroundType === "color-block";
   const isDarkSolid = backgroundType === "dark-solid";
@@ -273,26 +306,29 @@ async function startRender({
 
   const mood = (analysis.mood as string) ?? "default";
   const colors = colorPalettes[mood] ?? colorPalettes.default;
-  const beats = generateBeatTimestamps(songDuration, cutInterval);
+  const beats = generateBeatTimestamps(songDuration, cutInterval, sections, verseInterval, chorusInterval, dropInterval);
 
   let backgroundElements: object[] = [];
 
   if (isColorBlock) {
-    backgroundElements = beats.map((beat, i) => ({
-      name: `bg-${i}`,
-      type: "shape",
-      shape: "rectangle",
-      track: 1,
-      time: beat,
-      duration: cutInterval + 0.05,
-      width: "100%",
-      height: "100%",
-      x: "50%",
-      y: "50%",
-      x_anchor: "50%",
-      y_anchor: "50%",
-      fill_color: colors[i % colors.length],
-    }));
+    backgroundElements = beats.map((beat, i) => {
+      const nextBeat = beats[i + 1] ?? songDuration;
+      return {
+        name: `bg-${i}`,
+        type: "shape",
+        shape: "rectangle",
+        track: 1,
+        time: beat,
+        duration: (nextBeat - beat) + 0.05,
+        width: "100%",
+        height: "100%",
+        x: "50%",
+        y: "50%",
+        x_anchor: "50%",
+        y_anchor: "50%",
+        fill_color: colors[i % colors.length],
+      };
+    });
   } else if (isDarkSolid) {
     backgroundElements = [{
       name: "bg-solid",
@@ -311,30 +347,19 @@ async function startRender({
     }];
   } else {
     const availableClips = clips.length > 0 ? clips : [{ url: "" }];
-    const segments: { url: string; start: number; duration: number }[] = [];
-    let currentTime = 0;
-    let clipIndex = 0;
 
-    while (currentTime < songDuration) {
-      const segmentDuration = Math.min(cutInterval, songDuration - currentTime);
-      segments.push({
-        url: availableClips[clipIndex % availableClips.length].url,
-        start: currentTime,
-        duration: segmentDuration,
-      });
-      currentTime += segmentDuration;
-      clipIndex++;
-    }
-
-    backgroundElements = segments.map((seg, index) => ({
-      name: `clip-${index}`,
-      type: "video",
-      track: 1,
-      time: seg.start,
-      duration: seg.duration,
-      source: seg.url,
-      fit: "cover",
-    }));
+    backgroundElements = beats.map((beat, i) => {
+      const nextBeat = beats[i + 1] ?? songDuration;
+      return {
+        name: `clip-${i}`,
+        type: "video",
+        track: 1,
+        time: beat,
+        duration: (nextBeat - beat) + 0.05,
+        source: availableClips[i % availableClips.length].url,
+        fit: "cover",
+      };
+    });
   }
 
   const captionElements = captions.map((word, index) => {
