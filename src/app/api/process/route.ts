@@ -314,8 +314,7 @@ async function startRender({
       };
     });
   } else if (isDarkSolid) {
-    // Dark Lyrics — premium dark background with beat pulses and wine red vignette
-    const baseBackground = [{
+    backgroundElements = [{
       name: "bg-base",
       type: "shape",
       shape: "rectangle",
@@ -330,43 +329,6 @@ async function startRender({
       y_anchor: "50%",
       fill_color: "#080808",
     }];
-
-    // Beat pulse flashes — subtle brightness bump on every beat
-    const beatPulses = beats.map((beat, i) => ({
-      name: `pulse-${i}`,
-      type: "shape",
-      shape: "rectangle",
-      track: 2,
-      time: beat,
-      duration: 0.12,
-      width: "100%",
-      height: "100%",
-      x: "50%",
-      y: "50%",
-      x_anchor: "50%",
-      y_anchor: "50%",
-      fill_color: "#ffffff",
-      opacity: "0.03",
-    }));
-
-    // Wine red vignette overlay — always present, gives depth
-    const vignette = [{
-      name: "vignette",
-      type: "shape",
-      shape: "rectangle",
-      track: 3,
-      time: 0,
-      duration: songDuration,
-      width: "100%",
-      height: "100%",
-      x: "50%",
-      y: "50%",
-      x_anchor: "50%",
-      y_anchor: "50%",
-      fill_color: "radial-gradient(ellipse at center, transparent 40%, rgba(139,0,20,0.4) 100%)",
-    }];
-
-    backgroundElements = [...baseBackground, ...beatPulses, ...vignette];
   } else {
     const availableClips = clips.length > 0 ? clips : [{ url: "" }];
     backgroundElements = beats.map((beat, i) => {
@@ -388,7 +350,7 @@ async function startRender({
     const base = {
       name: `word-${index}`,
       type: "text",
-      track: isDarkSolid ? 4 : 2,
+      track: 2,
       time: word.start,
       duration: word.end - word.start + 0.1,
       x: "50%",
@@ -400,17 +362,18 @@ async function startRender({
     };
 
     if (isDarkSolid) {
-      // Premium Dark Lyrics caption — large, glowing, commanding
       return {
         ...base,
         y: "50%",
         y_anchor: "50%",
         font_family: "Montserrat",
         font_weight: "900",
-        font_size: 140,
+        font_size: 150,
         fill_color: "#ffffff",
-        stroke_color: "rgba(255,255,255,0.15)",
-        stroke_width: "1px",
+        shadow_color: "rgba(255,255,255,0.3)",
+        shadow_blur: "30px",
+        shadow_x: "0px",
+        shadow_y: "0px",
       };
     }
 
@@ -516,7 +479,7 @@ async function startRender({
           {
             name: "audio",
             type: "audio",
-            track: isDarkSolid ? 5 : 3,
+            track: 3,
             time: 0,
             source: fileUrl,
           },
