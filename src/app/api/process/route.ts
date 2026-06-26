@@ -54,7 +54,6 @@ export async function POST(request: Request) {
     await supabase.from("videos").update({ status: "processing" }).eq("id", videoId);
 
     const transcription = await transcribeAudio(fileUrl);
-
     const analysis = await analyzeWithClaude({ title, artist, lyrics: transcription.text });
 
     await supabase
@@ -113,7 +112,6 @@ function getCreditCost(plan: string, backgroundType?: string, captionStyle?: str
   const isPremiumPlan = plan === "business" || plan === "studio";
   const isBasicTemplate = backgroundType === "color-block" || backgroundType === "dark-solid";
   const isBasicCaption = captionStyle === "bold-overlay" || captionStyle === "minimal";
-
   if (isPremiumPlan) return 350;
   if (isBasicTemplate && isBasicCaption) return 100;
   return 200;
@@ -140,15 +138,7 @@ async function transcribeAudio(fileUrl: string) {
   return whisperRes.json();
 }
 
-async function analyzeWithClaude({
-  title,
-  artist,
-  lyrics,
-}: {
-  title: string;
-  artist: string;
-  lyrics: string;
-}) {
+async function analyzeWithClaude({ title, artist, lyrics }: { title: string; artist: string; lyrics: string }) {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 1024,
@@ -160,7 +150,7 @@ async function analyzeWithClaude({
 Song: "${title}" by ${artist}
 Lyrics: ${lyrics}
 
-Estimate the song structure based on the lyrics (verses repeat themes, choruses repeat the hook/title line, bridges/drops are high energy shifts). Estimate timestamps based on typical song pacing if you cannot know exact timing.
+Estimate the song structure based on the lyrics. Verses repeat themes, choruses repeat the hook, bridges and drops are high energy shifts. Estimate timestamps based on typical song pacing.
 
 Return exactly:
 {
@@ -206,9 +196,7 @@ Return exactly:
 }
 
 async function pickClips(mood: string, energy: string, backgroundType?: string) {
-  if (backgroundType === "color-block" || backgroundType === "dark-solid") {
-    return [];
-  }
+  if (backgroundType === "color-block" || backgroundType === "dark-solid") return [];
 
   let { data: clips } = await supabase
     .from("clips")
@@ -243,16 +231,13 @@ function generateBeatTimestamps(
 
   while (t < songDuration) {
     beats.push(parseFloat(t.toFixed(2)));
-
     const currentSection = sections.find((s) => t >= s.startTime && t < s.endTime);
-
     let interval = cutInterval;
     if (currentSection) {
       if (currentSection.type === "chorus") interval = chorusInterval;
       else if (currentSection.type === "drop" || currentSection.type === "bridge") interval = dropInterval;
       else if (currentSection.type === "verse") interval = verseInterval;
     }
-
     t += Math.max(0.5, interval);
   }
 
@@ -288,10 +273,11 @@ async function startRender({
   const chorusInterval = (analysis.chorusInterval as number) ?? 2;
   const dropInterval = (analysis.dropInterval as number) ?? 1;
   const sections = (analysis.sections as Array<{ type: string; startTime: number; endTime: number }>) ?? [];
-
   const backgroundType = template?.background_type as string ?? "";
   const isColorBlock = backgroundType === "color-block";
   const isDarkSolid = backgroundType === "dark-solid";
+  const beats = generateBeatTimestamps(songDuration, cutInterval, sections, verseInterval, chorusInterval, dropInterval);
+  const mood = (analysis.mood as string) ?? "default";
 
   const colorPalettes: Record<string, string[]> = {
     energetic: ["#1a0a2e", "#0a1a2e", "#2e0a1a", "#0a2e1a", "#2e1a0a", "#1a2e0a"],
@@ -304,9 +290,7 @@ async function startRender({
     default: ["#1a0a2e", "#0a1a2e", "#2e0a1a", "#0a2e1a", "#2e1a0a", "#1a2e0a"],
   };
 
-  const mood = (analysis.mood as string) ?? "default";
   const colors = colorPalettes[mood] ?? colorPalettes.default;
-  const beats = generateBeatTimestamps(songDuration, cutInterval, sections, verseInterval, chorusInterval, dropInterval);
 
   let backgroundElements: object[] = [];
 
@@ -330,8 +314,9 @@ async function startRender({
       };
     });
   } else if (isDarkSolid) {
-    backgroundElements = [{
-      name: "bg-solid",
+    // Dark Lyrics — premium dark background with beat pulses and wine red vignette
+    const baseBackground = [{
+      name: "bg-base",
       type: "shape",
       shape: "rectangle",
       track: 1,
@@ -343,11 +328,47 @@ async function startRender({
       y: "50%",
       x_anchor: "50%",
       y_anchor: "50%",
-      fill_color: "#000000",
+      fill_color: "#080808",
     }];
+
+    // Beat pulse flashes — subtle brightness bump on every beat
+    const beatPulses = beats.map((beat, i) => ({
+      name: `pulse-${i}`,
+      type: "shape",
+      shape: "rectangle",
+      track: 2,
+      time: beat,
+      duration: 0.12,
+      width: "100%",
+      height: "100%",
+      x: "50%",
+      y: "50%",
+      x_anchor: "50%",
+      y_anchor: "50%",
+      fill_color: "#ffffff",
+      opacity: "0.03",
+    }));
+
+    // Wine red vignette overlay — always present, gives depth
+    const vignette = [{
+      name: "vignette",
+      type: "shape",
+      shape: "rectangle",
+      track: 3,
+      time: 0,
+      duration: songDuration,
+      width: "100%",
+      height: "100%",
+      x: "50%",
+      y: "50%",
+      x_anchor: "50%",
+      y_anchor: "50%",
+      fill_color: "radial-gradient(ellipse at center, transparent 40%, rgba(139,0,20,0.4) 100%)",
+    }];
+
+    backgroundElements = [...baseBackground, ...beatPulses, ...vignette];
   } else {
     const availableClips = clips.length > 0 ? clips : [{ url: "" }];
-
     backgroundElements = beats.map((beat, i) => {
       const nextBeat = beats[i + 1] ?? songDuration;
       return {
@@ -362,20 +383,36 @@ async function startRender({
     });
   }
 
+  // Caption elements — Dark Lyrics gets special treatment
   const captionElements = captions.map((word, index) => {
     const base = {
       name: `word-${index}`,
       type: "text",
-      track: 2,
+      track: isDarkSolid ? 4 : 2,
       time: word.start,
       duration: word.end - word.start + 0.1,
       x: "50%",
       x_anchor: "50%",
-      width: "90%",
+      width: "85%",
       height: "auto",
       text: word.word.toUpperCase(),
       text_align: "center",
     };
+
+    if (isDarkSolid) {
+      // Premium Dark Lyrics caption — large, glowing, commanding
+      return {
+        ...base,
+        y: "50%",
+        y_anchor: "50%",
+        font_family: "Montserrat",
+        font_weight: "900",
+        font_size: 140,
+        fill_color: "#ffffff",
+        stroke_color: "rgba(255,255,255,0.15)",
+        stroke_width: "1px",
+      };
+    }
 
     switch (captionStyle) {
       case "word-highlight":
@@ -447,10 +484,10 @@ async function startRender({
   const watermarkElements = plan === "free" ? [{
     name: "watermark",
     type: "text",
-    track: 4,
+    track: 5,
     time: 0,
     x: "50%",
-    y: "92%",
+    y: "94%",
     x_anchor: "50%",
     y_anchor: "50%",
     width: "90%",
@@ -459,7 +496,7 @@ async function startRender({
     font_family: "Montserrat",
     font_weight: "600",
     font_size: 40,
-    fill_color: "rgba(255,255,255,0.5)",
+    fill_color: "rgba(255,255,255,0.3)",
     text_align: "center",
   }] : [];
 
@@ -479,7 +516,7 @@ async function startRender({
           {
             name: "audio",
             type: "audio",
-            track: 3,
+            track: isDarkSolid ? 5 : 3,
             time: 0,
             source: fileUrl,
           },
