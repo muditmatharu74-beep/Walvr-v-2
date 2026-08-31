@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "next lint"
   },
-  "dependencies": {
+ "dependencies": {
+    "remotion": "^4.0.512",
+    "@remotion/lambda": "^4.0.512",
+    "@remotion/renderer": "^4.0.512",
+    "@remotion/bundler": "^4.0.512",
     "next": "14.2.5",
     "react": "^18",
     "react-dom": "^18",
