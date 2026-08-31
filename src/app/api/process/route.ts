@@ -73,18 +73,63 @@ export async function POST(request: Request) {
       template?.background_type
     );
 
-    const render = await startRender({
-      videoId,
-      analysis,
-      captions: transcription.words ?? [],
-      captionStyle,
-      title,
-      artist,
-      fileUrl,
-      clips,
-      plan,
-      template,
-    });
+    let render;
+
+    if (template?.background_type === "dark-solid") {
+      // Use Remotion for Dark Lyrics
+      const songDuration = transcription.words?.length > 0
+        ? transcription.words[transcription.words.length - 1].end + 1
+        : 30;
+      const cutInterval = (analysis.cutInterval as number) ?? 4;
+      const verseInterval = (analysis.verseInterval as number) ?? 5;
+      const chorusInterval = (analysis.chorusInterval as number) ?? 2;
+      const dropInterval = (analysis.dropInterval as number) ?? 1;
+      const sections = (analysis.sections as Array<{ type: string; startTime: number; endTime: number }>) ?? [];
+
+      const beats: number[] = [];
+      let t = 0;
+      while (t < songDuration) {
+        beats.push(parseFloat(t.toFixed(2)));
+        const currentSection = sections.find((s) => t >= s.startTime && t < s.endTime);
+        let interval = cutInterval;
+        if (currentSection) {
+          if (currentSection.type === "chorus") interval = chorusInterval;
+          else if (currentSection.type === "drop" || currentSection.type === "bridge") interval = dropInterval;
+          else if (currentSection.type === "verse") interval = verseInterval;
+        }
+        t += Math.max(0.5, interval);
+      }
+
+      const remotionRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/render-remotion`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          captions: transcription.words ?? [],
+          beats,
+          songDuration,
+          audioUrl: fileUrl,
+          plan,
+        }),
+      });
+
+      const remotionData = await remotionRes.json();
+      if (!remotionRes.ok) throw new Error("Remotion render failed");
+
+      render = { id: remotionData.renderId, bucketName: remotionData.bucketName };
+    } else {
+      render = await startRender({
+        videoId,
+        analysis,
+        captions: transcription.words ?? [],
+        captionStyle,
+        title,
+        artist,
+        fileUrl,
+        clips,
+        plan,
+        template,
+      });
+    }
 
     await supabase
       .from("profiles")
