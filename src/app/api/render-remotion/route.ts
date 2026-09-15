@@ -31,6 +31,6 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("Remotion render error:", err);
-    return NextResponse.json({ error: "Render failed" }, { status: 500 });
+    return NextResponse.json({ error: "Render failed", details: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }
