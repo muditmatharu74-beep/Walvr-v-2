@@ -112,8 +112,15 @@ export async function POST(request: Request) {
         }),
       });
 
-      const remotionData = await remotionRes.json();
-      if (!remotionRes.ok) throw new Error("Remotion render failed");
+      const remotionData = await remotionRes.json().catch(() => null);
+      if (!remotionRes.ok) {
+        const detail = remotionData?.details ?? remotionData?.error
+          ?? "Non-JSON or empty response from /api/render-remotion";
+        throw new Error(`Remotion render failed (HTTP ${remotionRes.status}): ${detail}`);
+      }
+      if (!remotionData?.renderId || !remotionData?.bucketName) {
+        throw new Error("Remotion response is missing renderId or bucketName");
+      }
 
       render = { id: remotionData.renderId, bucketName: remotionData.bucketName };
     } else {
