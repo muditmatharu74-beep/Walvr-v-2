@@ -112,6 +112,10 @@ export default function UploadPage() {
         throw new Error("You've reached your limit. Upgrade your plan to continue.");
       }
 
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Could not start your video. Please try again.");
+      }
       router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
