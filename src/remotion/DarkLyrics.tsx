@@ -6,14 +6,14 @@ type Caption = {
   end: number;
 };
 
-type Props = {
+export type DarkLyricsProps = {
   captions: Caption[];
   songDuration: number;
   beats: number[];
   audioUrl?: string;
 };
 
-export const DarkLyrics: React.FC<Props> = ({ captions, beats, audioUrl }) => {
+export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUrl }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const currentTime = frame / fps;
