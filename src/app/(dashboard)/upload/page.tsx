@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { MAX_UPLOAD_BYTES, AUDIO_EXTENSIONS } from "@/lib/rendering/upload";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -48,7 +49,15 @@ export default function UploadPage() {
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
-    if (f) setFile(f);
+    if (!f) return;
+    const extension = f.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!AUDIO_EXTENSIONS.includes(extension) || f.size > MAX_UPLOAD_BYTES || f.size === 0) {
+      setFile(null);
+      setError("Choose an MP3, MP4, WAV, or M4A file up to 25 MB.");
+      return;
+    }
+    setError("");
+    setFile(f);
   }
 
   function handleUploadNext(e: React.FormEvent) {
@@ -112,6 +121,10 @@ export default function UploadPage() {
         throw new Error("You've reached your limit. Upgrade your plan to continue.");
       }
 
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Video processing failed. Please try again.");
+      }
       router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -181,6 +194,8 @@ export default function UploadPage() {
           ))}
         </div>
 
+        {error && <p role="alert" style={{ color: "#f5b2bc", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</p>}
+
         {/* Step 1 — Upload */}
         {step === "upload" && (
           <form onSubmit={handleUploadNext} style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
@@ -193,7 +208,7 @@ export default function UploadPage() {
                     <p style={{ color: "#c8102e", fontSize: "0.9rem" }}>{file.name}</p>
                   ) : (
                     <>
-                      <p style={{ color: "rgba(245,240,235,0.4)", marginBottom: "0.5rem", fontSize: "0.9rem" }}>Drop your MP3 or MP4 here</p>
+                      <p style={{ color: "rgba(245,240,235,0.4)", marginBottom: "0.5rem", fontSize: "0.9rem" }}>Choose an MP3, MP4, WAV, or M4A (up to 25 MB)</p>
                       <p style={{ color: "rgba(245,240,235,0.2)", fontSize: "0.75rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>or click to browse</p>
                     </>
                   )}
@@ -338,7 +353,7 @@ export default function UploadPage() {
               ))}
             </div>
 
-            {error && <p style={{ color: "#c8102e", fontSize: "0.85rem" }}>{error}</p>}
+
 
             <div style={{ display: "flex", gap: "1rem" }}>
               <button onClick={() => setStep("template")} style={{ flex: 1, padding: "1rem", background: "transparent", color: "rgba(245,240,235,0.4)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "0.8rem", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Georgia', serif" }}>← Back</button>
