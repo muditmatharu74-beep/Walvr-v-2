@@ -20,7 +20,8 @@ export async function startRemotionRender(props: DarkLyricsProps) {
   const result = await renderMediaOnLambda({
     ...config, composition: "DarkLyrics", inputProps: props,
     codec: "h264", imageFormat: "jpeg", maxRetries: 1,
-    framesPerLambda: Math.max(60, Math.ceil(props.songDuration * 30 / 100)),
+    // Leave room for orchestration and progress polling under the AWS limit of 10.
+    concurrency: 5,
     concurrencyPerLambda: 1, outName: 'dark-lyrics-' + Date.now() + '.mp4',
     timeoutInMilliseconds: 120000,
   });
@@ -30,3 +31,4 @@ export async function startRemotionRender(props: DarkLyricsProps) {
     functionName: config.functionName, region: config.region,
   }};
 }
+
