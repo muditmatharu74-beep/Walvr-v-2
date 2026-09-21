@@ -1,3 +1,4 @@
+import { subscriptionPlan } from "@/lib/billing/prices";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
@@ -10,6 +11,8 @@ export async function POST(request: Request) {
   try {
     const { priceId } = await request.json();
 
+    if (!subscriptionPlan(priceId)) return NextResponse.json({ error: "Unknown price" }, { status: 400 });
+
     const supabase = await createClient();
     const {
       data: { user },
@@ -19,14 +22,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Not logged in" }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("stripe_customer_id")
       .eq("id", user.id)
       .single();
 
+    if (profileError || !profile) throw profileError ?? new Error("Profile not found");
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
+      subscription_data: { metadata: { user_id: user.id } },
       payment_method_types: ["card"],
       customer: profile?.stripe_customer_id ?? undefined,
       line_items: [

@@ -27,6 +27,8 @@ export async function POST(request: Request) {
   let videoId = "";
   let userId = "";
   let claimed = false;
+  let renderStarted = false;
+  let creditsRemaining = 0;
 
   try {
     const session = await createSessionClient();
@@ -80,17 +82,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Not enough credits. Top up to continue.", credits: currentCredits, required: creditCost }, { status: 403 });
     }
 
-    const { data: claim, error: claimError } = await supabase.from("videos")
-      .update({ status: "processing" }).eq("id", videoId).eq("user_id", userId)
-      .eq("status", "pending").select("id").maybeSingle();
+    const { data: reservation, error: claimError } = await supabase.rpc("reserve_video_credits", {
+      p_user_id: userId, p_video_id: videoId, p_cost: creditCost, p_plan: plan,
+    });
     if (claimError) throw claimError;
-    if (!claim) return NextResponse.json({ error: "This video has already been submitted" }, { status: 409 });
+    if (reservation.status !== "reserved") return NextResponse.json({
+      error: reservation.status === "insufficient" ? "Not enough credits" : "Video or plan changed. Refresh and try again.",
+    }, { status: reservation.status === "insufficient" ? 403 : 409 });
+    creditsRemaining = reservation.credits;
     claimed = true;
 
     const transcription = await transcribeAudio(fileUrl);
     const analysis = await analyzeWithClaude({ title, artist, lyrics: transcription.text });
 
-    await supabase
+    const { error: analysisError } = await supabase
       .from("videos")
       .update({
         analysis,
@@ -99,7 +104,8 @@ export async function POST(request: Request) {
         genre: analysis.genre,
         status: "processing",
       })
-      .eq("id", videoId);
+      .eq("id", videoId).eq("user_id", userId);
+    if (analysisError) throw analysisError;
 
     const clips = await pickClips(
       template?.clip_mood ?? analysis.mood,
@@ -151,12 +157,9 @@ export async function POST(request: Request) {
       });
     }
 
-    await supabase
-      .from("profiles")
-      .update({ credits: currentCredits - creditCost })
-      .eq("id", userId);
-
-    await incrementUsage(userId);
+    renderStarted = true;
+    // If tracking cannot be saved, keep the reservation for reconciliation.
+    console.info("Render submitted", { videoId, render });
 
     const { error: saveError } = await supabase.from("videos").update({
       render_id: render.id, status: "rendering",
@@ -167,11 +170,14 @@ export async function POST(request: Request) {
     }).eq("id", videoId).eq("user_id", userId);
     if (saveError) throw saveError;
 
-    return NextResponse.json({ success: true, renderId: render.id, creditsRemaining: currentCredits - creditCost });
+    return NextResponse.json({ success: true, renderId: render.id, creditsRemaining });
   } catch (err) {
     console.error("Process error:", err);
-    if (claimed && videoId && userId) {
-      await supabase.from("videos").update({ status: "error" }).eq("id", videoId).eq("user_id", userId);
+    if (claimed && !renderStarted && videoId && userId) {
+      const { error: refundError } = await supabase.rpc("settle_video_credits", {
+        p_user_id: userId, p_video_id: videoId, p_status: "error", p_render_id: null, p_url: null,
+      });
+      if (refundError) console.error("Render refund requires reconciliation", { videoId, refundError });
     }
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
@@ -580,52 +586,4 @@ async function startRender({
 
   const data = await res.json();
   return data[0];
-}
-
-async function checkUsageLimit(userId: string, plan: string): Promise<boolean> {
-  const limits: Record<string, number> = {
-    free: 3,
-    starter: 10,
-    pro: Infinity,
-    business: Infinity,
-    studio: Infinity,
-  };
-
-  const limit = limits[plan] ?? 3;
-  if (limit === Infinity) return true;
-
-  const month = new Date().toISOString().slice(0, 7);
-
-  const { data } = await supabase
-    .from("usage")
-    .select("count")
-    .eq("user_id", userId)
-    .eq("month", month)
-    .single();
-
-  const count = data?.count ?? 0;
-  return count < limit;
-}
-
-async function incrementUsage(userId: string) {
-  const month = new Date().toISOString().slice(0, 7);
-
-  const { data } = await supabase
-    .from("usage")
-    .select("count")
-    .eq("user_id", userId)
-    .eq("month", month)
-    .single();
-
-  if (data) {
-    await supabase
-      .from("usage")
-      .update({ count: data.count + 1 })
-      .eq("user_id", userId)
-      .eq("month", month);
-  } else {
-    await supabase
-      .from("usage")
-      .insert({ user_id: userId, month, count: 1 });
-  }
 }

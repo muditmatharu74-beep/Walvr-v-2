@@ -15,7 +15,7 @@ function load(file, mocks = {}) {
   vm.runInNewContext(code, {
     module: mod, exports: mod.exports,
     require: (id) => Object.hasOwn(mocks, id) ? mocks[id] : require(id),
-    console: { error() {} }, process, URL, Response, Request, Blob, FormData, Uint8Array,
+    console: { error() {}, info() {} }, process, URL, Response, Request, Blob, FormData, Uint8Array,
     fetch: mocks.fetch ?? (() => { throw new Error('Unexpected network request'); }),
   }, { filename: file });
   return mod.exports;
@@ -47,7 +47,13 @@ test('upload URL rejects other users, external hosts, traversal and signed query
 
 function setup({ user = { id: userId }, video = null, progress = {}, progressError = false, fetchResult } = {}) {
   const calls = []; const writes = []; const providerCalls = [];
-  const db = { from(table) {
+  const db = { async rpc(name, args) {
+    assert.equal(name, 'settle_video_credits');
+    assert.equal(args.p_user_id, userId);
+    assert.equal(args.p_render_id, 'stored-render');
+    writes.push({ status: args.p_status, render_url: args.p_url });
+    return { data: { status: args.p_status, url: args.p_url }, error: null };
+  }, from(table) {
     const query = {
       select() { return query; }, eq(key, value) { calls.push([table, key, value]); return query; },
       update(value) { writes.push(value); return query; },
@@ -147,4 +153,38 @@ test('submission rejects another owner and already-submitted videos before paid 
   assert.equal((await load('src/app/api/process/route.ts', running.mocks).POST(request(body))).status, 409);
   assert.equal(running.writes.length, 0);
   assert.equal(running.providerCalls.length, 0);
+});
+
+function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false }={}) {
+  const state=setup(); const rpc=[]; const renders=[];
+  const db={
+    async rpc(name,args){rpc.push({name,args});return {data:name==='reserve_video_credits'?{status:reservation,credits:400}:{status:'error'},error:null}},
+    from(table){let update;
+      const data=table==='videos'?{id:videoId,status:'pending'}:table==='profiles'?{plan:'free',credits:500}:{active:true,plan_required:'free',background_type:'dark-solid'};
+      const q={select(){return q},eq(){return q},update(value){update=value;return q},maybeSingle:async()=>({data,error:null}),single:async()=>({data,error:null}),
+        then(resolve){return Promise.resolve({error:trackingFails&&update?.render_id?new Error('tracking unavailable'):null}).then(resolve)}};return q;
+    },
+  };
+  state.mocks['@supabase/supabase-js']={createClient:()=>db};
+  state.mocks['@anthropic-ai/sdk']=class{constructor(){this.messages={create:async()=>({content:[{type:'text',text:'{"mood":"dark","energy":"low"}'}]})}}};
+  state.mocks['@/lib/rendering/remotion']={startDarkLyricsRender:async()=>{renders.push('job');return {id:'job',bucketName:'bucket',functionName:'function',region:'us-east-1'}}};
+  state.mocks.fetch=async(url)=>{
+    if(transcriptionFails) return new Response('failure',{status:500});
+    if(String(url).includes('transcriptions'))return Response.json({text:'lyrics',duration:10,words:[{word:'hello',start:0,end:1}]});
+    return new Response('audio',{headers:{'content-type':'audio/mpeg'}});
+  };
+  const body={videoId,templateId:'13c51a59-7ad1-4669-a519-aa694f1b047f',title:'Song',artist:'Artist',captionStyle:'bold-overlay',fileUrl:`${origin}/storage/v1/object/public/uploads/${userId}/song.mp3`};
+  return {rpc,renders,run:()=>load('src/app/api/process/route.ts',state.mocks).POST(request(body))};
+}
+test('reservation rejection stops submission before renderer work',async()=>{
+  const s=submission({reservation:'already_submitted'});assert.equal((await s.run()).status,409);assert.equal(s.renders.length,0);assert.equal(s.rpc.length,1);
+});
+test('pre-render processing failure uses the atomic refund transaction',async()=>{
+  const s=submission({transcriptionFails:true});assert.equal((await s.run()).status,500);assert.equal(s.rpc[1].name,'settle_video_credits');assert.equal(s.rpc[1].args.p_render_id,null);assert.equal(s.renders.length,0);
+});
+test('successful submission uses reservation balance without a second debit',async()=>{
+  const s=submission();const r=await s.run();assert.equal(r.status,200);assert.equal((await r.json()).creditsRemaining,400);assert.equal(s.rpc.length,1);assert.equal(s.renders.length,1);
+});
+test('tracking failure after a job starts preserves charge for reconciliation',async()=>{
+  const s=submission({trackingFails:true});assert.equal((await s.run()).status,500);assert.equal(s.renders.length,1);assert.equal(s.rpc.length,1);
 });
