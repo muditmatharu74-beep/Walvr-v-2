@@ -23,7 +23,10 @@ const json = { NextResponse: { json: (body, options) => ({ body, status: options
 const request = body => ({ json: async () => body });
 function dbFixture(records = {}) {
   const calls = [];
-  return { calls, from(table) {
+  return { calls, async rpc(name,args) {
+    calls.push({rpc:name,args,update: name==='settle_video_credits' ? {status:args.p_status,render_url:args.p_url} : null});
+    return {data:name==='reserve_video_credits' ? {status:records.claim===false?'already_submitted':'reserved',credits:200} : {status:args.p_status,url:args.p_url},error:null};
+  }, from(table) {
     const op = { table, filters: [], update: null };
     calls.push(op);
     const query = {
@@ -155,7 +158,7 @@ test('processing preserves full audio duration, saves tracking and uses authenti
     assert.ok(r.db.calls.filter(c=>c.table==='profiles').every(c=>c.filters.some(([k,v])=>k==='id'&&v==='owner')));
   } finally {global.fetch=original;}
 });
-test('render failure does not deduct credits',async()=>{
+test('render startup failure requests a refund',async()=>{
   process.env.NEXT_PUBLIC_SUPABASE_URL='https://example.supabase.co';
   const original=global.fetch;
   global.fetch=async url=>url.includes('/audio/transcriptions')
@@ -165,7 +168,8 @@ test('render failure does not deduct credits',async()=>{
     const r=processRoute({failRender:true});
     assert.equal((await r.POST(request(body))).status,500);
     assert.equal(r.db.calls.some(c=>c.table==='profiles'&&c.update),false);
-    assert.equal(r.db.calls.at(-1).update.status,'error');
+    assert.equal(r.db.calls.at(-1).rpc,'settle_video_credits');
+    assert.equal(r.db.calls.at(-1).args.p_status,'error');
   } finally {global.fetch=original;}
 });
 test('duplicate processing request never starts another render',async()=>{

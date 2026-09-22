@@ -61,10 +61,12 @@ export async function POST(request: Request) {
       } else if (render.status === "failed") status = "error";
     }
     if (status !== "rendering") {
-      const { error: updateError } = await supabase.from("videos")
-        .update({ status, ...(url ? { render_url: url } : {}) })
-        .eq("id", video.id).eq("user_id", user.id);
+      const { data: settled, error: updateError } = await supabase.rpc("settle_video_credits", {
+        p_user_id: user.id, p_video_id: video.id, p_status: status, p_render_id: video.render_id, p_url: url,
+      });
       if (updateError) throw updateError;
+      status = settled.status;
+      url = settled.url;
     }
     return NextResponse.json({ status, ...(url ? { url } : {}) });
   } catch (err) {

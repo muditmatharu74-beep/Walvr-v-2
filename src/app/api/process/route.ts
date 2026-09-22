@@ -71,12 +71,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Not enough credits. Top up to continue.", credits: currentCredits, required: creditCost }, { status: 403 });
     }
 
-    const { data: claimed, error: claimError } = await supabase.from("videos")
-      .update({ status: "processing" }).eq("id", body.videoId).eq("user_id", userId)
-      .eq("status", "pending").select("id").maybeSingle();
-    if (claimError) throw claimError;
-    if (!claimed) return NextResponse.json({ error: "This video has already been submitted" }, { status: 409 });
-    videoId = claimed.id;
+    const { data: reservation, error: reserveError } = await supabase.rpc("reserve_video_credits", {
+      p_user_id: userId, p_video_id: body.videoId, p_cost: creditCost, p_plan: plan,
+    });
+    if (reserveError) throw reserveError;
+    if (reservation?.status !== "reserved") return NextResponse.json({ error: reservation?.status === "insufficient" ? "Not enough credits" : "This video has already been submitted or your plan changed" }, { status: 409 });
+    videoId = body.videoId;
 
     const transcription = await transcribeAudio(fileUrl);
     const songDuration = getSongDuration(transcription.duration);
@@ -156,16 +156,14 @@ export async function POST(request: Request) {
     if (saveError) throw saveError;
     renderSaved = true;
 
-    const { error: creditError } = await supabase.from("profiles")
-      .update({ credits: currentCredits - creditCost }).eq("id", userId);
-    if (creditError) throw creditError;
-    await incrementUsage(userId);
-
-    return NextResponse.json({ success: true, renderId: render.id, creditsRemaining: currentCredits - creditCost });
+    return NextResponse.json({ success: true, renderId: render.id, creditsRemaining: reservation.credits });
   } catch (err) {
     console.error("Process error:", err);
     if (videoId && !renderSaved) {
-      await supabase.from("videos").update({ status: "error" }).eq("id", videoId);
+      const { error: refundError } = await supabase.rpc("settle_video_credits", {
+        p_user_id: userId, p_video_id: videoId, p_status: "error", p_render_id: null, p_url: null,
+      });
+      if (refundError) console.error("Render startup refund failed:", videoId, refundError);
     }
     return NextResponse.json({ error: renderSaved ? "Render started, but account update failed. Check your dashboard before retrying." : "Could not start your video. Please try again or contact support." }, { status: 500 });
   }
