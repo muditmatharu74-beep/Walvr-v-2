@@ -1,6 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient as createSessionClient } from "@/lib/supabase/server";
+import { startRemotionRender } from "@/lib/remotion";
+import { signRenderMetadata } from "@/lib/render-signature";
+import { getSongDuration, validateUploadUrl } from "@/lib/render-settings";
+
+export const maxDuration = 300;
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -13,19 +19,34 @@ const supabase = createClient(
 
 export async function POST(request: Request) {
   let videoId = "";
+  let userId = "";
+  let renderSaved = false;
 
   try {
     const body = await request.json();
-    videoId = body.videoId;
-    const { fileUrl, title, artist, captionStyle, userId, templateId } = body;
+    const session = await createSessionClient();
+    const { data: { user }, error: authError } = await session.auth.getUser();
+    if (authError || !user) return NextResponse.json({ error: "Please sign in" }, { status: 401 });
+    userId = user.id;
+    const { fileUrl, title, artist, captionStyle, templateId } = body;
+    if (typeof body.videoId !== "string" || typeof fileUrl !== "string") {
+      return NextResponse.json({ error: "Missing video or audio file" }, { status: 400 });
+    }
+    try { validateUploadUrl(fileUrl, process.env.NEXT_PUBLIC_SUPABASE_URL!, userId); }
+    catch { return NextResponse.json({ error: "Select an audio file uploaded to your account" }, { status: 400 }); }
+    const { data: ownedVideo, error: videoError } = await supabase.from("videos")
+      .select("id, status").eq("id", body.videoId).eq("user_id", userId).single();
+    if (videoError || !ownedVideo) return NextResponse.json({ error: "Video not found" }, { status: 404 });
+    if (ownedVideo.status !== "pending") return NextResponse.json({ error: "This video has already been submitted" }, { status: 409 });
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("plan, credits")
       .eq("id", userId)
       .single();
 
-    const plan = profile?.plan ?? "free";
+    if (profileError || !profile) throw new Error("Unable to load account credits");
+    const plan = profile.plan ?? "free";
     const currentCredits = profile?.credits ?? 0;
 
     const { data: template } = await supabase
@@ -34,12 +55,12 @@ export async function POST(request: Request) {
       .eq("id", templateId)
       .single();
 
+    if (!template) return NextResponse.json({ error: "Template not found" }, { status: 400 });
     if (template) {
       const planOrder = ["free", "starter", "pro", "business", "studio"];
       const userPlanIndex = planOrder.indexOf(plan);
       const templatePlanIndex = planOrder.indexOf(template.plan_required);
-      if (userPlanIndex < templatePlanIndex) {
-        await supabase.from("videos").update({ status: "error" }).eq("id", videoId);
+      if (userPlanIndex < 0 || templatePlanIndex < 0 || userPlanIndex < templatePlanIndex) {
         return NextResponse.json({ error: "Template not available on your plan" }, { status: 403 });
       }
     }
@@ -47,25 +68,32 @@ export async function POST(request: Request) {
     const creditCost = getCreditCost(plan, template?.background_type, captionStyle);
 
     if (currentCredits < creditCost) {
-      await supabase.from("videos").update({ status: "error" }).eq("id", videoId);
       return NextResponse.json({ error: "Not enough credits. Top up to continue.", credits: currentCredits, required: creditCost }, { status: 403 });
     }
 
-    await supabase.from("videos").update({ status: "processing" }).eq("id", videoId);
+    const { data: reservation, error: reserveError } = await supabase.rpc("reserve_video_credits", {
+      p_user_id: userId, p_video_id: body.videoId, p_cost: creditCost, p_plan: plan,
+    });
+    if (reserveError) throw reserveError;
+    if (reservation?.status !== "reserved") return NextResponse.json({ error: reservation?.status === "insufficient" ? "Not enough credits" : "This video has already been submitted or your plan changed" }, { status: 409 });
+    videoId = body.videoId;
 
     const transcription = await transcribeAudio(fileUrl);
+    const songDuration = getSongDuration(transcription.duration);
     const analysis = await analyzeWithClaude({ title, artist, lyrics: transcription.text });
 
-    await supabase
+    const { error: analysisError } = await supabase
       .from("videos")
       .update({
         analysis,
         captions: transcription.words,
         mood: analysis.mood,
         genre: analysis.genre,
-        status: "rendering",
+        status: "processing",
       })
       .eq("id", videoId);
+
+    if (analysisError) throw analysisError;
 
     const clips = await pickClips(
       template?.clip_mood ?? analysis.mood,
@@ -77,9 +105,6 @@ export async function POST(request: Request) {
 
     if (template?.background_type === "dark-solid") {
       // Use Remotion for Dark Lyrics
-      const songDuration = transcription.words?.length > 0
-        ? transcription.words[transcription.words.length - 1].end + 1
-        : 30;
       const cutInterval = (analysis.cutInterval as number) ?? 4;
       const verseInterval = (analysis.verseInterval as number) ?? 5;
       const chorusInterval = (analysis.chorusInterval as number) ?? 2;
@@ -100,32 +125,14 @@ export async function POST(request: Request) {
         t += Math.max(0.5, interval);
       }
 
-      const remotionRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/render-remotion`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          captions: transcription.words ?? [],
-          beats,
-          songDuration,
-          audioUrl: fileUrl,
-          plan,
-        }),
+      render = await startRemotionRender({
+        captions: transcription.words ?? [], beats, songDuration,
+        audioUrl: fileUrl, plan, captionStyle,
       });
-
-      const remotionData = await remotionRes.json().catch(() => null);
-      if (!remotionRes.ok) {
-        const detail = remotionData?.details ?? remotionData?.error
-          ?? "Non-JSON or empty response from /api/render-remotion";
-        throw new Error(`Remotion render failed (HTTP ${remotionRes.status}): ${detail}`);
-      }
-      if (!remotionData?.renderId || !remotionData?.bucketName) {
-        throw new Error("Remotion response is missing renderId or bucketName");
-      }
-
-      render = { id: remotionData.renderId, bucketName: remotionData.bucketName };
     } else {
       render = await startRender({
         videoId,
+        songDuration,
         analysis,
         captions: transcription.words ?? [],
         captionStyle,
@@ -138,25 +145,27 @@ export async function POST(request: Request) {
       });
     }
 
-    await supabase
-      .from("profiles")
-      .update({ credits: currentCredits - creditCost })
-      .eq("id", userId);
+    const metadata = render.metadata ? {
+      ...render.metadata,
+      signature: signRenderMetadata({ videoId, userId, renderId: render.id }, render.metadata),
+    } : { provider: "creatomate" };
+    const { error: saveError } = await supabase.from("videos").update({
+      render_id: render.id, status: "rendering",
+      analysis: { ...analysis, render: metadata },
+    }).eq("id", videoId).eq("user_id", userId);
+    if (saveError) throw saveError;
+    renderSaved = true;
 
-    await incrementUsage(userId);
-
-    await supabase
-      .from("videos")
-      .update({ render_id: render.id, status: "rendering" })
-      .eq("id", videoId);
-
-    return NextResponse.json({ success: true, renderId: render.id, creditsRemaining: currentCredits - creditCost });
+    return NextResponse.json({ success: true, renderId: render.id, creditsRemaining: reservation.credits });
   } catch (err) {
     console.error("Process error:", err);
-    if (videoId) {
-      await supabase.from("videos").update({ status: "error" }).eq("id", videoId);
+    if (videoId && !renderSaved) {
+      const { error: refundError } = await supabase.rpc("settle_video_credits", {
+        p_user_id: userId, p_video_id: videoId, p_status: "error", p_render_id: null, p_url: null,
+      });
+      if (refundError) console.error("Render startup refund failed:", videoId, refundError);
     }
-    return NextResponse.json({ error: "Processing failed" }, { status: 500 });
+    return NextResponse.json({ error: renderSaved ? "Render started, but account update failed. Check your dashboard before retrying." : "Could not start your video. Please try again or contact support." }, { status: 500 });
   }
 }
 
@@ -170,12 +179,14 @@ function getCreditCost(plan: string, backgroundType?: string, captionStyle?: str
 }
 
 async function transcribeAudio(fileUrl: string) {
-  const response = await fetch(fileUrl);
+  const response = await fetch(fileUrl, { redirect: "error" });
+  if (!response.ok) throw new Error("Audio download failed: HTTP " + response.status);
   const buffer = await response.arrayBuffer();
-  const blob = new Blob([buffer], { type: "audio/mpeg" });
+  if (buffer.byteLength > 25 * 1024 * 1024) throw new Error("Audio exceeds the transcription upload limit");
+  const blob = new Blob([buffer], { type: response.headers.get("content-type") || "audio/mpeg" });
 
   const formData = new FormData();
-  formData.append("file", blob, "audio.mp3");
+  formData.append("file", blob, new URL(fileUrl).pathname.split("/").pop() || "audio.mp3");
   formData.append("model", "whisper-1");
   formData.append("response_format", "verbose_json");
   formData.append("timestamp_granularities[]", "word");
@@ -186,7 +197,7 @@ async function transcribeAudio(fileUrl: string) {
     body: formData,
   });
 
-  if (!whisperRes.ok) throw new Error("Whisper transcription failed");
+  if (!whisperRes.ok) throw new Error("Whisper transcription failed: HTTP " + whisperRes.status + " " + await whisperRes.text());
   return whisperRes.json();
 }
 
@@ -298,6 +309,7 @@ function generateBeatTimestamps(
 
 async function startRender({
   videoId,
+  songDuration,
   analysis,
   captions,
   captionStyle,
@@ -309,6 +321,7 @@ async function startRender({
   template,
 }: {
   videoId: string;
+  songDuration: number;
   analysis: Record<string, unknown>;
   captions: Array<{ word: string; start: number; end: number }>;
   captionStyle: string;
@@ -319,7 +332,6 @@ async function startRender({
   plan: string;
   template: Record<string, unknown> | null;
 }) {
-  const songDuration = captions.length > 0 ? captions[captions.length - 1].end + 1 : 30;
   const cutInterval = (analysis.cutInterval as number) ?? 4;
   const verseInterval = (analysis.verseInterval as number) ?? 5;
   const chorusInterval = (analysis.chorusInterval as number) ?? 2;
@@ -524,6 +536,7 @@ async function startRender({
     body: JSON.stringify({
       source: {
         output_format: "mp4",
+        duration: songDuration,
         width,
         height,
         elements: [

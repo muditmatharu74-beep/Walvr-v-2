@@ -6,16 +6,20 @@ type Caption = {
   end: number;
 };
 
-type Props = {
+export type DarkLyricsProps = {
   captions: Caption[];
   songDuration: number;
   beats: number[];
   audioUrl?: string;
+  plan?: string;
+  captionStyle?: string;
 };
 
-export const DarkLyrics: React.FC<Props> = ({ captions, beats, audioUrl }) => {
+export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUrl, plan = "free", captionStyle = "bold-overlay" }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width } = useVideoConfig();
+  const scale = width / 1080;
+  const minimal = captionStyle === "minimal";
   const currentTime = frame / fps;
 
   const currentWord = captions.find(
@@ -42,18 +46,18 @@ export const DarkLyrics: React.FC<Props> = ({ captions, beats, audioUrl }) => {
       }} />
 
       {/* Previous word — faded */}
-      {prevWord && (
+      {prevWord && !minimal && (
         <AbsoluteFill style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           opacity: 0.15,
-          transform: "translateY(-80px)",
+          transform: `translateY(${-100 * scale}px)`,
         }}>
           <p style={{
             fontFamily: "Montserrat, sans-serif",
             fontWeight: 900,
-            fontSize: 90,
+            fontSize: 90 * scale,
             color: "white",
             textAlign: "center",
             padding: "0 60px",
@@ -71,25 +75,31 @@ export const DarkLyrics: React.FC<Props> = ({ captions, beats, audioUrl }) => {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          transform: minimal ? "translateY(35%)" : undefined,
         }}>
           <p style={{
             fontFamily: "Montserrat, sans-serif",
-            fontWeight: 900,
-            fontSize: 160,
-            color: "white",
+            fontWeight: minimal ? 400 : 900,
+            fontSize: (minimal ? 70 : 160) * scale,
+            color: captionStyle === "karaoke" ? "#ffdd00" : "white",
             textAlign: "center",
+            maxWidth: "90%",
+            overflowWrap: "anywhere",
             padding: "0 40px",
+            background: captionStyle === "word-highlight" ? "rgba(255,255,255,0.15)" : undefined,
+            borderRadius: captionStyle === "word-highlight" ? 12 * scale : undefined,
             margin: 0,
             lineHeight: 1.05,
             textShadow: "0 0 40px rgba(255,255,255,0.3), 0 0 80px rgba(255,255,255,0.1)",
             transform: `scale(${isOnBeat ? 1.05 : 1})`,
-            transition: "transform 0.05s ease",
+
           }}>
             {currentWord.word.toUpperCase()}
           </p>
         </AbsoluteFill>
       )}
 
+      {plan === "free" && <div style={{ position: "absolute", bottom: "4%", width: "100%", textAlign: "center", color: "rgba(255,255,255,0.3)", fontSize: 40 * scale }}>Made with Walvr</div>}
       {/* Audio */}
       {audioUrl && <Audio src={audioUrl} />}
 
