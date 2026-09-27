@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient as createSessionClient } from "@/lib/supabase/server";
-import { darkLyricsProgress } from "@/lib/rendering/remotion";
+import { readRenderStatus } from "@/lib/rendering/status";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,35 +28,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: video.status });
     }
 
-    let status = "rendering";
-    let url: string | null = null;
-    if (video.render_provider === "remotion") {
-      if (!video.render_bucket || !video.render_function || !video.render_region) {
-        throw new Error("Remotion render metadata is missing");
-      }
-      const progress = await darkLyricsProgress(video);
-      if (progress.fatalErrorEncountered) {
-        console.error("Remotion render failed:", progress.errors);
-        status = "error";
-      } else if (progress.done && progress.outputFile) {
-        status = "done";
-        url = progress.outputFile;
-      }
-    } else if (!video.render_provider && video.clip_style === "dark-solid") {
-      // Old renders lost their bucket name. Do not query Creatomate with an AWS ID.
+    if (!video.render_provider && video.clip_style === "dark-solid") {
       return NextResponse.json({ error: "This older render is missing tracking information. Create a new video." }, { status: 409 });
-    } else if (!video.render_provider || video.render_provider === "creatomate") {
-      const response = await fetch(`https://api.creatomate.com/v1/renders/${encodeURIComponent(video.render_id)}`, {
-        headers: { Authorization: `Bearer ${process.env.CREATOMATE_API_KEY}` },
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error(`Creatomate status failed (HTTP ${response.status})`);
-      const render = await response.json();
-      if (render.status === "succeeded" && render.url) { status = "done"; url = render.url; }
-      if (render.status === "failed") status = "error";
-    } else {
-      throw new Error("Unknown render provider");
     }
+    let { status, url } = await readRenderStatus(video);
 
     if (status !== "rendering") {
       const { data: settled, error: updateError } = await supabase.rpc("settle_video_credits", {

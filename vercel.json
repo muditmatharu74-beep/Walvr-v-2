@@ -3,5 +3,11 @@
     "src/app/api/admin/upload-clip/route.ts": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/recover-renders",
+      "schedule": "0 8 * * *"
+    }
+  ]
 }
