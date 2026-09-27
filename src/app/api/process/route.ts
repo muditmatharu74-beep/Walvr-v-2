@@ -116,6 +116,7 @@ export async function POST(request: Request) {
     let render: { id: string; bucketName?: string; functionName?: string; region?: string };
     const songDuration = getSongDuration(transcription.duration, transcription.words ?? []);
 
+    renderStarted = true; // An exception after submission may hide an accepted job.
     if (template?.background_type === "dark-solid") {
       // Use Remotion for Dark Lyrics
       const cutInterval = (analysis.cutInterval as number) ?? 4;
@@ -157,7 +158,6 @@ export async function POST(request: Request) {
       });
     }
 
-    renderStarted = true;
     // If tracking cannot be saved, keep the reservation for reconciliation.
     console.info("Render submitted", { videoId, render });
 

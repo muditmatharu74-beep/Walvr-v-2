@@ -15,7 +15,7 @@ function load(file, mocks = {}) {
   vm.runInNewContext(code, {
     module: mod, exports: mod.exports,
     require: (id) => Object.hasOwn(mocks, id) ? mocks[id] : require(id),
-    console: { error() {}, info() {} }, process, URL, Response, Request, Blob, FormData, Uint8Array,
+    console: { error() {}, info() {} }, process, URL, Response, Request, Blob, FormData, Uint8Array, AbortSignal,
     fetch: mocks.fetch ?? (() => { throw new Error('Unexpected network request'); }),
   }, { filename: file });
   return mod.exports;
@@ -75,6 +75,7 @@ function setup({ user = { id: userId }, video = null, progress = {}, progressErr
     '@anthropic-ai/sdk': class { constructor() {} },
     fetch: async (url) => { providerCalls.push(url); return Response.json(fetchResult); },
   };
+  mocks["@/lib/rendering/status"] = load("src/lib/rendering/status.ts", { "./remotion": mocks["@/lib/rendering/remotion"], fetch: mocks.fetch });
   return { mocks, calls, writes, providerCalls };
 }
 const request = (body) => new Request('https://walvr.test/api/check-render', { method: 'POST', body: JSON.stringify(body) });
@@ -155,7 +156,7 @@ test('submission rejects another owner and already-submitted videos before paid 
   assert.equal(running.providerCalls.length, 0);
 });
 
-function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false }={}) {
+function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false, submissionFails=false }={}) {
   const state=setup(); const rpc=[]; const renders=[];
   const db={
     async rpc(name,args){rpc.push({name,args});return {data:name==='reserve_video_credits'?{status:reservation,credits:400}:{status:'error'},error:null}},
@@ -167,7 +168,7 @@ function submission({ reservation='reserved', transcriptionFails=false, tracking
   };
   state.mocks['@supabase/supabase-js']={createClient:()=>db};
   state.mocks['@anthropic-ai/sdk']=class{constructor(){this.messages={create:async()=>({content:[{type:'text',text:'{"mood":"dark","energy":"low"}'}]})}}};
-  state.mocks['@/lib/rendering/remotion']={startDarkLyricsRender:async()=>{renders.push('job');return {id:'job',bucketName:'bucket',functionName:'function',region:'us-east-1'}}};
+  state.mocks['@/lib/rendering/remotion']={startDarkLyricsRender:async()=>{renders.push('job');if(submissionFails)throw Error('submission response lost');return {id:'job',bucketName:'bucket',functionName:'function',region:'us-east-1'}}};
   state.mocks.fetch=async(url)=>{
     if(transcriptionFails) return new Response('failure',{status:500});
     if(String(url).includes('transcriptions'))return Response.json({text:'lyrics',duration:10,words:[{word:'hello',start:0,end:1}]});
@@ -187,4 +188,8 @@ test('successful submission uses reservation balance without a second debit',asy
 });
 test('tracking failure after a job starts preserves charge for reconciliation',async()=>{
   const s=submission({trackingFails:true});assert.equal((await s.run()).status,500);assert.equal(s.renders.length,1);assert.equal(s.rpc.length,1);
+});
+
+test('lost submission response is not treated as proof of render failure',async()=>{
+  const s=submission({submissionFails:true});assert.equal((await s.run()).status,500);assert.equal(s.renders.length,1);assert.equal(s.rpc.length,1);
 });
