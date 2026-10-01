@@ -1,0 +1,22 @@
+name: Visual study browser check
+on:
+  pull_request:
+    paths: ['experiments/relatability/**', 'tests/relatability.test.cjs', '.github/workflows/visual-study.yml']
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --prefix "$RUNNER_TEMP/visual-study" --no-audit --no-fund playwright@1.55.1
+      - run: node "$RUNNER_TEMP/visual-study/node_modules/playwright/cli.js" install --with-deps chromium
+      - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - run: node --test tests/relatability.test.cjs
+      - run: node experiments/relatability/browser-check.cjs
+        env:
+          NODE_PATH: ${{ runner.temp }}/visual-study/node_modules
