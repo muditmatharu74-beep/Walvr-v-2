@@ -8,8 +8,8 @@ const path=require('node:path');
 const {pathToFileURL}=require('node:url');
 (async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'walvr-visual-'));
- const fixture=path.join(dir,'fixture.mp4');
- execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','color=c=0x151015:s=180x320:r=30','-t','20','-c:v','libx264','-pix_fmt','yuv420p',fixture]);
+ const fixture=path.join(dir,'fixture.webm');
+ execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','color=c=0x151015:s=180x320:r=30','-t','20','-c:v','libvpx','-b:v','100k','-pix_fmt','yuv420p',fixture]);
  const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
  try{
   const page=await browser.newPage({viewport:{width:1100,height:900},acceptDownloads:true});

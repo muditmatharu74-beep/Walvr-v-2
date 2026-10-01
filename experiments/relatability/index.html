@@ -23,7 +23,7 @@ const $=id=>document.getElementById(id), P=WalvrStudy;
 let urls={},rows=[],draft=[],order=[],position=0,participant=1,familiarity='',studyId='',busy=false;
 const say=t=>$('message').textContent=t;
 const show=id=>['setup','study','finish','thanks'].forEach(x=>$(x).hidden=x!==id);
-function metadata(url){return new Promise((resolve,reject)=>{const v=document.createElement('video');v.preload='metadata';const timer=setTimeout(()=>done(Error('Video metadata timed out')),10000);function done(error){clearTimeout(timer);v.onloadedmetadata=null;v.onerror=null;const item={duration:v.duration,width:v.videoWidth,height:v.videoHeight};v.removeAttribute('src');v.load();error?reject(error):resolve(item)}v.onloadedmetadata=()=>done();v.onerror=()=>done(Error('A file could not be played; export H.264 MP4 and retry'));v.src=url})}
+function metadata(url){return new Promise((resolve,reject)=>{const v=document.createElement('video');v.preload='metadata';const timer=setTimeout(()=>done(Error('Video metadata timed out')),10000);function done(error){clearTimeout(timer);v.onloadedmetadata=null;v.onerror=null;const item={duration:v.duration,width:v.videoWidth,height:v.videoHeight};v.removeAttribute('src');v.load();error?reject(error):resolve(item)}v.onloadedmetadata=()=>done();v.onerror=()=>done(Error('A file could not be played. Try a supported browser or re-export as H.264 MP4 / VP8 WebM.'));v.src=url})}
 function release(){for(const u of Object.values(urls))URL.revokeObjectURL(u);urls={}}
 $('start').onclick=async()=>{if(busy)return;busy=true;$('start').disabled=true;say('Checking files…');try{
  studyId=$('studyId').value.trim();if(!studyId)throw Error('Enter a song / excerpt ID.');
