@@ -20,7 +20,9 @@ const {pathToFileURL}=require('node:url');
   await page.check('#matched');await page.click('#start');assert.match(await page.locator('#message').textContent(),/three finished/);
   for(const id of ['dark','scenery','everyday'])await page.setInputFiles('#'+id,fixture);
   await page.screenshot({path:path.join(dir,'setup.png'),fullPage:true});
-  await page.click('#start');await page.locator('#study').waitFor({state:'visible'});
+  await page.click('#start');
+  await page.waitForFunction(()=>!document.querySelector('#study').hidden || document.querySelector('#message').textContent !== 'Checking files…');
+  assert.equal(await page.locator('#study').isVisible(),true,'Setup failed: '+await page.locator('#message').textContent());
   assert.equal(await page.locator('#setup').isVisible(),false);
   assert.equal(await page.locator('#next').isDisabled(),true);
   for(let i=0;i<3;i++){
