@@ -1,0 +1,31 @@
+name: Neon MP4 render smoke test
+on:
+  pull_request:
+    paths:
+      - 'src/remotion/**'
+      - 'src/components/NeonCaptionOverlay.tsx'
+      - 'src/lib/rendering/neon-captions.ts'
+      - 'tests/neon-render.cjs'
+      - '.github/workflows/neon-render.yml'
+      - 'package*.json'
+permissions:
+  contents: read
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - run: node tests/neon-render.cjs
+        env:
+          WALVR_RENDER_OUTPUT: ${{ runner.temp }}/neon-exports
+      - uses: actions/upload-artifact@v4
+        with:
+          name: neon-caption-smoke-exports
+          path: ${{ runner.temp }}/neon-exports
+          if-no-files-found: error

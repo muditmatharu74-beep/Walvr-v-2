@@ -32,3 +32,9 @@ For the separate three-background relatability experiment, keep ONE caption styl
 - The updated Remotion composition bundles successfully. Local still rendering encountered a restricted-environment network-interface enumeration error; actual Remotion output and Lambda execution remain staging checks.
 
 No new footage was acquired, no song was selected, no production migration was run, and no production render was submitted by this change.
+
+## Actual MP4 smoke exports
+
+`tests/neon-render.cjs` renders the real Dark Lyrics composition twice with the two caption selections. It uses four seconds of a generated low-volume sine tone and original sample words, with no stock footage. The dedicated CI workflow validates 1080x1920 H.264 video, AAC audio, four-second duration, visible cyan pixels and a changing current-word highlight; the styles must produce different image hashes. CI stores MP4s, PNG samples and `verification.json` in the `neon-caption-smoke-exports` artifact.
+
+These exports validate the composition and encoding on a standard runner. They do not establish that AWS Lambda permissions, the deployed staging bundle, Creatomate credentials, clip playback or application completion tracking work. Live staging tests remain necessary.
