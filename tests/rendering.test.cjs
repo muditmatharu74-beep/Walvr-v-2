@@ -22,6 +22,7 @@ function load(file, mocks = {}) {
 }
 const timing = load('src/lib/rendering/timing.ts');
 const upload = load('src/lib/rendering/upload.ts');
+const neonCaptions = load('src/lib/rendering/neon-captions.ts');
 const userId = '9e87c63d-2535-4a00-be94-6dae6899a4ab';
 const videoId = '93a4e653-ae1f-4b67-9dc6-1dde9ed3f238';
 const origin = 'https://example.supabase.co';
@@ -72,6 +73,7 @@ function setup({ user = { id: userId }, video = null, progress = {}, progressErr
     }, startDarkLyricsRender: () => { throw new Error('Unexpected render submission'); } },
     '@/lib/rendering/timing': timing,
     '@/lib/rendering/upload': upload,
+    '@/lib/rendering/neon-captions': neonCaptions,
     '@anthropic-ai/sdk': class { constructor() {} },
     fetch: async (url) => { providerCalls.push(url); return Response.json(fetchResult); },
   };
@@ -156,25 +158,26 @@ test('submission rejects another owner and already-submitted videos before paid 
   assert.equal(running.providerCalls.length, 0);
 });
 
-function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false, submissionFails=false }={}) {
+function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false, submissionFails=false, captionStyle='bold-overlay', backgroundType='dark-solid' }={}) {
   const state=setup(); const rpc=[]; const renders=[];
   const db={
     async rpc(name,args){rpc.push({name,args});return {data:name==='reserve_video_credits'?{status:reservation,credits:400}:{status:'error'},error:null}},
     from(table){let update;
-      const data=table==='videos'?{id:videoId,status:'pending'}:table==='profiles'?{plan:'free',credits:500}:{active:true,plan_required:'free',background_type:'dark-solid'};
-      const q={select(){return q},eq(){return q},update(value){update=value;return q},maybeSingle:async()=>({data,error:null}),single:async()=>({data,error:null}),
-        then(resolve){return Promise.resolve({error:trackingFails&&update?.render_id?new Error('tracking unavailable'):null}).then(resolve)}};return q;
+      const data=table==='videos'?{id:videoId,status:'pending'}:table==='profiles'?{plan:'free',credits:500}:{active:true,plan_required:'free',background_type:backgroundType};
+      const q={select(){return q},eq(){return q},limit(){return q},update(value){update=value;return q},maybeSingle:async()=>({data,error:null}),single:async()=>({data,error:null}),
+        then(resolve){return Promise.resolve({data: table==='clips'?[]:data,error:trackingFails&&update?.render_id?new Error('tracking unavailable'):null}).then(resolve)}};return q;
     },
   };
   state.mocks['@supabase/supabase-js']={createClient:()=>db};
   state.mocks['@anthropic-ai/sdk']=class{constructor(){this.messages={create:async()=>({content:[{type:'text',text:'{"mood":"dark","energy":"low"}'}]})}}};
-  state.mocks['@/lib/rendering/remotion']={startDarkLyricsRender:async()=>{renders.push('job');if(submissionFails)throw Error('submission response lost');return {id:'job',bucketName:'bucket',functionName:'function',region:'us-east-1'}}};
-  state.mocks.fetch=async(url)=>{
+  state.mocks['@/lib/rendering/remotion']={startDarkLyricsRender:async(props)=>{renders.push(props);if(submissionFails)throw Error('submission response lost');return {id:'job',bucketName:'bucket',functionName:'function',region:'us-east-1'}}};
+  state.mocks.fetch=async(url,options)=>{
+    if(String(url).includes('creatomate.com')){renders.push(JSON.parse(options.body).source);return Response.json([{id:'job'}])}
     if(transcriptionFails) return new Response('failure',{status:500});
     if(String(url).includes('transcriptions'))return Response.json({text:'lyrics',duration:10,words:[{word:'hello',start:0,end:1}]});
     return new Response('audio',{headers:{'content-type':'audio/mpeg'}});
   };
-  const body={videoId,templateId:'13c51a59-7ad1-4669-a519-aa694f1b047f',title:'Song',artist:'Artist',captionStyle:'bold-overlay',fileUrl:`${origin}/storage/v1/object/public/uploads/${userId}/song.mp3`};
+  const body={videoId,templateId:'13c51a59-7ad1-4669-a519-aa694f1b047f',title:'Song',artist:'Artist',captionStyle,fileUrl:`${origin}/storage/v1/object/public/uploads/${userId}/song.mp3`};
   return {rpc,renders,run:()=>load('src/app/api/process/route.ts',state.mocks).POST(request(body))};
 }
 test('reservation rejection stops submission before renderer work',async()=>{
@@ -193,3 +196,19 @@ test('tracking failure after a job starts preserves charge for reconciliation',a
 test('lost submission response is not treated as proof of render failure',async()=>{
   const s=submission({submissionFails:true});assert.equal((await s.run()).status,500);assert.equal(s.renders.length,1);assert.equal(s.rpc.length,1);
 });
+
+for (const captionStyle of ['clean-neon', 'pixel-neon']) {
+  test(`${captionStyle} is accepted and forwarded to the billed Remotion render`, async () => {
+    const s=submission({captionStyle});assert.equal((await s.run()).status,200);
+    assert.equal(s.renders[0].captionStyle,captionStyle);assert.equal(s.rpc[0].args.p_cost,200);
+  });
+  test(`${captionStyle} builds an explicit-font Creatomate payload with cyan word sync`, async () => {
+    const s=submission({captionStyle,backgroundType:'color-block'});assert.equal((await s.run()).status,200);
+    const source=s.renders[0];assert.equal(source.fonts[0].family,captionStyle==='pixel-neon'?'Press Start 2P':'Montserrat');
+    assert.match(source.fonts[0].source,/\.woff$/);
+    const text=source.elements.filter(e=>e.name?.startsWith('neon'));
+    assert.equal(text.length,2);assert.equal(text[1].fill_color,'#63edff');
+    assert.equal(text[1].time,0);assert.equal(text[1].duration,1);
+    assert.equal(text[0].text,captionStyle==='pixel-neon'?'HELLO':'hello');
+  });
+}

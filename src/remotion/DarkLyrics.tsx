@@ -1,5 +1,12 @@
 import { useCurrentFrame, useVideoConfig, Audio, AbsoluteFill } from "remotion";
 
+import { isNeonStyle } from "../lib/rendering/neon-captions";
+import { NeonCaptionOverlay } from "../components/NeonCaptionOverlay";
+import { useEffect, useState } from "react";
+import { delayRender, continueRender, cancelRender } from "remotion";
+import "@fontsource/montserrat/latin-800.css";
+import "@fontsource/press-start-2p/latin-400.css";
+
 type Caption = {
   word: string;
   start: number;
@@ -11,9 +18,20 @@ export type DarkLyricsProps = {
   songDuration: number;
   beats: number[];
   audioUrl?: string;
+  captionStyle?: string;
 };
 
-export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUrl }) => {
+export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUrl, captionStyle }) => {
+  const neon = isNeonStyle(captionStyle);
+  const [fontHandle] = useState(() => neon ? delayRender("Load neon caption font") : null);
+  useEffect(() => {
+    if (fontHandle === null) return;
+    const font = captionStyle === "pixel-neon" ? '400 48px "Press Start 2P"' : '800 64px "Montserrat"';
+    document.fonts.load(font).then(loaded => {
+      if (!loaded.length) throw new Error("Neon caption font failed to load");
+      continueRender(fontHandle);
+    }).catch(cancelRender);
+  }, [captionStyle, fontHandle]);
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const currentTime = frame / fps;
@@ -42,7 +60,7 @@ export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUr
       }} />
 
       {/* Previous word — faded */}
-      {prevWord && (
+      {!neon && prevWord && (
         <AbsoluteFill style={{
           display: "flex",
           alignItems: "center",
@@ -66,7 +84,7 @@ export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUr
       )}
 
       {/* Current word — full brightness with scale slam */}
-      {currentWord && (
+      {!neon && currentWord && (
         <AbsoluteFill style={{
           display: "flex",
           alignItems: "center",
@@ -89,6 +107,8 @@ export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUr
           </p>
         </AbsoluteFill>
       )}
+
+      {neon && <NeonCaptionOverlay captions={captions} style={captionStyle} time={currentTime} />}
 
       {/* Audio */}
       {audioUrl && <Audio src={audioUrl} />}
