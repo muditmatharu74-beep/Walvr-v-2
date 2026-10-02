@@ -7,11 +7,13 @@ import { startDarkLyricsRender } from "@/lib/rendering/remotion";
 import { songDuration as getSongDuration } from "@/lib/rendering/timing";
 import { ownedUploadUrl, MAX_UPLOAD_BYTES } from "@/lib/rendering/upload";
 
+import { CAPTION_STYLE_IDS, creditCost as getCreditCost, isNeonStyle, neonDesign, neonTextElements } from "@/lib/rendering/neon-captions";
+
 const requestSchema = z.object({
   videoId: z.string().uuid(), templateId: z.string().uuid(),
   fileUrl: z.string().url(), title: z.string().trim().min(1).max(300),
   artist: z.string().max(300).default(""),
-  captionStyle: z.enum(["bold-overlay", "word-highlight", "frosted", "minimal", "karaoke"]),
+  captionStyle: z.enum(CAPTION_STYLE_IDS),
 });
 
 const anthropic = new Anthropic({
@@ -140,7 +142,7 @@ export async function POST(request: Request) {
       }
 
       render = await startDarkLyricsRender({
-        captions: transcription.words ?? [], beats, songDuration, audioUrl: fileUrl,
+        captions: transcription.words ?? [], beats, songDuration, audioUrl: fileUrl, captionStyle,
       });
     } else {
       render = await startRender({
@@ -181,15 +183,6 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
-}
-
-function getCreditCost(plan: string, backgroundType?: string, captionStyle?: string): number {
-  const isPremiumPlan = plan === "business" || plan === "studio";
-  const isBasicTemplate = backgroundType === "color-block" || backgroundType === "dark-solid";
-  const isBasicCaption = captionStyle === "bold-overlay" || captionStyle === "minimal";
-  if (isPremiumPlan) return 350;
-  if (isBasicTemplate && isBasicCaption) return 100;
-  return 200;
 }
 
 async function transcribeAudio(fileUrl: string) {
@@ -434,7 +427,7 @@ async function startRender({
   }
 
   // Caption elements — Dark Lyrics gets special treatment
-  const captionElements = captions.map((word, index) => {
+  const captionElements = isNeonStyle(captionStyle) ? neonTextElements(captions, captionStyle) : captions.map((word, index) => {
     const base = {
       name: `word-${index}`,
       type: "text",
@@ -562,6 +555,7 @@ async function startRender({
         output_format: "mp4",
         width,
         height,
+        ...(isNeonStyle(captionStyle) ? { fonts: [{ family: neonDesign(captionStyle).family, weight: neonDesign(captionStyle).weight, style: "normal", source: neonDesign(captionStyle).fontUrl }] } : {}),
         elements: [
           ...backgroundElements,
           {
