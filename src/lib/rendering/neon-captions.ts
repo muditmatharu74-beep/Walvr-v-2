@@ -14,7 +14,7 @@ export function neonDesign(style: NeonStyle) {
   const pixel = style === "pixel-neon";
   return {
     family: pixel ? "Press Start 2P" : "Montserrat", weight: pixel ? 400 : 800,
-    fontSize: pixel ? 48 : 64, characterWidth: pixel ? 1 : 0.72,
+    fontSize: pixel ? 48 : 64, characterWidth: pixel ? 1.1 : 0.85,
     glow: pixel ? 5 : 12, color: "#f5fbff", activeColor: "#63edff",
     fontUrl: pixel
       ? "https://cdn.jsdelivr.net/npm/@fontsource/press-start-2p@5.3.0/files/press-start-2p-latin-400-normal.woff"
@@ -26,14 +26,35 @@ export function neonDesign(style: NeonStyle) {
 // Coordinates are in a 1080 x 1920 design space, safely above social UI.
 export function layoutNeonCaptions(captions: WordTiming[], style: NeonStyle) {
   const design = neonDesign(style);
-  const valid = captions.filter(w => w.word.trim() && Number.isFinite(w.start) && Number.isFinite(w.end) && w.start >= 0 && w.end > w.start)
-    .map(w => ({ ...w, word: w.word.trim() })).sort((a, b) => a.start - b.start);
+  const sorted = captions.filter(w => w && typeof w.word === "string" && w.word.trim() && Number.isFinite(w.start) && Number.isFinite(w.end) && w.start >= 0 && w.end > w.start)
+    .map(w => ({ ...w, word: w.word.trim().replace(/\s+/g, " ") })).sort((a, b) => a.start - b.start);
+  const valid: WordTiming[] = [];
+  for (const word of sorted) {
+    const previous = valid[valid.length - 1];
+    if (previous && /^[.,!?;:…'"’”\)\]\}]+$/.test(word.word)) {
+      // Transcribers sometimes emit closing punctuation as a separate token.
+      previous.word += word.word;
+    } else if (previous && previous.start === word.start) {
+      // A shared timestamp cannot identify an individual active word. Display
+      // and highlight the tied words together instead of dropping a phrase.
+      previous.word += " " + word.word;
+      previous.end = Math.max(previous.end, word.end);
+    } else {
+      valid.push(word);
+    }
+  }
+  const displayText = (word: WordTiming) => style === "pixel-neon" ? word.word.toUpperCase() : word.word;
+  // Reserve extra room for wide capitals and rounding at phone-size scales
+  // without spreading ordinary short words across oversized slots.
+  const textUnits = (text: string) => Array.from(text).reduce((sum, character) => sum +
+    (style === "pixel-neon" ? design.characterWidth : /[WM]/.test(character) ? 1.3 :
+      /[wm]/.test(character) ? 1.1 : /[A-Z]/.test(character) ? 0.95 : design.characterWidth), 0);
   const phrases: WordTiming[][] = [];
   let group: WordTiming[] = [];
   for (const word of valid) {
     const previous = group[group.length - 1];
-    if (group.length && (group.length >= 4 || group.map(w => w.word).join(" ").length + word.word.length > 28 ||
-      word.start - previous.end > 0.6 || /[.!?]$/.test(previous.word))) {
+    if (group.length && (group.length >= 4 || Array.from([...group, word].map(displayText).join(" ")).length > 28 ||
+      word.start - Math.max(...group.map(w => w.end)) > 0.6 || /[.!?…]["'’”\)\]\}]*$/.test(previous.word))) {
       phrases.push(group); group = [];
     }
     group.push(word);
@@ -42,11 +63,12 @@ export function layoutNeonCaptions(captions: WordTiming[], style: NeonStyle) {
   return phrases.map((words, phraseIndex) => {
     const start = words[0].start;
     const nextStart = phrases[phraseIndex + 1]?.[0].start ?? Infinity;
-    const end = Math.min(words[words.length - 1].end + 0.1, nextStart);
+    const end = Math.min(Math.max(...words.map(w => w.end)) + 0.1, nextStart);
     const slots = words.map(word => {
-      const text = style === "pixel-neon" ? word.word.toUpperCase() : word.word;
-      const width = Math.min(864, Math.max(48, Array.from(text).length * design.fontSize * design.characterWidth + 12));
-      return { ...word, text, width };
+      const text = displayText(word);
+      const units = textUnits(text);
+      const width = Math.min(864, Math.max(48, units * design.fontSize + 12));
+      return { ...word, text, width, units };
     });
     const lines: typeof slots[] = [[]];
     for (const slot of slots) {
@@ -60,7 +82,7 @@ export function layoutNeonCaptions(captions: WordTiming[], style: NeonStyle) {
       return line.map(slot => {
         const x = left + slot.width / 2; left += slot.width + 16;
         return { ...slot, x, y: 1320 + (lineIndex - (lines.length - 1) / 2) * 100,
-          fontSize: Math.min(design.fontSize, (slot.width - 12) / (Array.from(slot.text).length * design.characterWidth)) };
+          fontSize: Math.min(design.fontSize, (slot.width - 12) / slot.units) };
       });
     });
     return { start, end, words: positioned };

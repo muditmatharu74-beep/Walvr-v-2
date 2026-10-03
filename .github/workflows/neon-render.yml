@@ -6,6 +6,7 @@ on:
       - 'src/components/NeonCaptionOverlay.tsx'
       - 'src/lib/rendering/neon-captions.ts'
       - 'tests/neon-render.cjs'
+      - 'tests/neon-edge-fixtures.cjs'
       - '.github/workflows/neon-render.yml'
       - 'package*.json'
 permissions:

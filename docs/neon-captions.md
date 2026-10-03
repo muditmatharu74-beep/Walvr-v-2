@@ -29,7 +29,7 @@ For the separate three-background relatability experiment, keep ONE caption styl
 - `npx tsc --noEmit`
 - `node --test tests/*.test.cjs`: caption layout, long-word fitting, silence/invalid timing handling, shared pricing, API acceptance, Remotion prop forwarding, Creatomate custom font and highlight payloads, plus existing regression tests.
 - Browser visual check of `/caption-preview` at desktop and 390-pixel phone width: fonts, overflow, highlighting, reduced motion and page errors.
-- The updated Remotion composition bundles successfully. Local still rendering encountered a restricted-environment network-interface enumeration error; actual Remotion output and Lambda execution remain staging checks.
+- The updated Remotion composition bundles and exports MP4s on CI. Local rendering encountered a restricted-environment network-interface enumeration error; Lambda execution remains a staging check.
 
 No new footage was acquired, no song was selected, no production migration was run, and no production render was submitted by this change.
 
@@ -38,3 +38,13 @@ No new footage was acquired, no song was selected, no production migration was r
 `tests/neon-render.cjs` renders the real Dark Lyrics composition twice with the two caption selections. It uses four seconds of a generated low-volume sine tone and original sample words, with no stock footage. The dedicated CI workflow validates 1080x1920 H.264 video, AAC audio, four-second duration, visible cyan pixels and a changing current-word highlight; the styles must produce different image hashes. CI stores MP4s, PNG samples and `verification.json` in the `neon-caption-smoke-exports` artifact.
 
 These exports validate the composition and encoding on a standard runner. They do not establish that AWS Lambda permissions, the deployed staging bundle, Creatomate credentials, clip playback or application completion tracking work. Live staging tests remain necessary.
+
+## Caption edge cases
+
+The shared layout filters malformed tokens and nonfinite, negative or nonpositive timestamps without mutating the source. Internal whitespace becomes a single space; standalone closing punctuation attaches to the preceding word, and a sentence ending followed by a closing quote still breaks the phrase. The phrase length budget includes spaces and Pixel Neon's uppercase expansion.
+
+Tokens with identical starts display and highlight together: their timestamps do not establish an individual word order. Distinct overlapping tokens hand the highlight to the next word at its start. Phrase visibility uses the greatest word end and clips at the next phrase start; genuine pauses clear captions. Normal distinct word timestamps are preserved.
+
+Wide Latin capitals use a conservative width estimate, and long words shrink within the central 80% of the frame. Extremely long tokens can become small; the initial Latin font subset still requires separate broader-script validation. At 30 fps, intervals shorter than one frame cannot guarantee an individual visible highlight; tests use fast 80 ms words.
+
+The browser check measures actual font glyph widths at phone size using the shared overlay. The MP4 test also exports `clean-neon-edges.mp4` and `pixel-neon-edges.mp4` with fast lyrics, overlaps, tied timestamps, a 40-character wide word, punctuation and silence. Export assertions check tied-word visibility, long-word safe bounds and caption-free pauses. These fixtures use original text and a generated tone.
