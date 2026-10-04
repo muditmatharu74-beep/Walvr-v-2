@@ -7,6 +7,7 @@ on:
       - 'src/lib/rendering/neon-captions.ts'
       - 'tests/neon-render.cjs'
       - 'tests/neon-edge-fixtures.cjs'
+      - 'tests/neon-timeline.cjs'
       - '.github/workflows/neon-render.yml'
       - 'package*.json'
 permissions:
@@ -23,6 +24,9 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - run: node tests/neon-render.cjs
+        env:
+          WALVR_RENDER_OUTPUT: ${{ runner.temp }}/neon-exports
+      - run: node tests/neon-timeline.cjs
         env:
           WALVR_RENDER_OUTPUT: ${{ runner.temp }}/neon-exports
       - uses: actions/upload-artifact@v4

@@ -36,11 +36,11 @@ export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUr
   const { fps } = useVideoConfig();
   const currentTime = frame / fps;
 
-  const currentWord = captions.find(
+  const currentWord = neon ? undefined : captions.find(
     (c) => currentTime >= c.start && currentTime <= c.end + 0.1
   );
 
-  const prevWord = captions.find(
+  const prevWord = neon ? undefined : captions.find(
     (c) => currentTime > c.end + 0.1 && 
     captions.indexOf(c) === captions.findIndex(cap => currentTime >= cap.start && currentTime <= cap.end + 0.1) - 1
   );

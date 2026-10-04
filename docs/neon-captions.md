@@ -48,3 +48,9 @@ Tokens with identical starts display and highlight together: their timestamps do
 Wide Latin capitals use a conservative width estimate, and long words shrink within the central 80% of the frame. Extremely long tokens can become small; the initial Latin font subset still requires separate broader-script validation. At 30 fps, intervals shorter than one frame cannot guarantee an individual visible highlight; tests use fast 80 ms words.
 
 The browser check measures actual font glyph widths at phone size using the shared overlay. The MP4 test also exports `clean-neon-edges.mp4` and `pixel-neon-edges.mp4` with fast lyrics, overlaps, tied timestamps, a 40-character wide word, punctuation and silence. Export assertions check tied-word visibility, long-word safe bounds and caption-free pauses. These fixtures use original text and a generated tone.
+
+## Longer timeline and composition validation
+
+`tests/neon-timeline.test.cjs` checks 600 tokens across a three-minute song timeline, instrumental intros/outros and the real component's handling of empty/malformed caption lists. Neon rendering skips the legacy word lookup so malformed tokens reach the shared validator instead of crashing first.
+
+`tests/neon-timeline.cjs` renders 16 actual composition stills on CI: opening, middle, final frame, instrumental gaps, empty captions and malformed tokens for each style. It verifies 5,403 frames for 180.1 seconds at 30 fps, visible cyan highlighting during lyrics and no captions during silence. A word extending past the audio end remains visible on the last valid frame, while a word starting beyond the video end cannot appear. PNGs and `timeline-verification.json` accompany the smoke export artifact. This samples a full-song timeline; it does not encode an entire three-minute MP4 or establish live provider integration.
