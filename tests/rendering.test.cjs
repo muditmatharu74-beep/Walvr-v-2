@@ -158,28 +158,82 @@ test('submission rejects another owner and already-submitted videos before paid 
   assert.equal(running.providerCalls.length, 0);
 });
 
-function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false, submissionFails=false, captionStyle='bold-overlay', backgroundType='dark-solid' }={}) {
+function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false, submissionFails=false, captionStyle='bold-overlay', backgroundType='dark-solid', plan='free', duration=10, words=[{word:'hello',start:0,end:1}], clips=[], analysis={mood:'dark',energy:'low'} }={}) {
   const state=setup(); const rpc=[]; const renders=[];
   const db={
     async rpc(name,args){rpc.push({name,args});return {data:name==='reserve_video_credits'?{status:reservation,credits:400}:{status:'error'},error:null}},
     from(table){let update;
-      const data=table==='videos'?{id:videoId,status:'pending'}:table==='profiles'?{plan:'free',credits:500}:{active:true,plan_required:'free',background_type:backgroundType};
+      const data=table==='videos'?{id:videoId,status:'pending'}:table==='profiles'?{plan,credits:500}:{active:true,plan_required:'free',background_type:backgroundType};
       const q={select(){return q},eq(){return q},limit(){return q},update(value){update=value;return q},maybeSingle:async()=>({data,error:null}),single:async()=>({data,error:null}),
-        then(resolve){return Promise.resolve({data: table==='clips'?[]:data,error:trackingFails&&update?.render_id?new Error('tracking unavailable'):null}).then(resolve)}};return q;
+        then(resolve){return Promise.resolve({data: table==='clips'?clips:data,error:trackingFails&&update?.render_id?new Error('tracking unavailable'):null}).then(resolve)}};return q;
     },
   };
   state.mocks['@supabase/supabase-js']={createClient:()=>db};
-  state.mocks['@anthropic-ai/sdk']=class{constructor(){this.messages={create:async()=>({content:[{type:'text',text:'{"mood":"dark","energy":"low"}'}]})}}};
+  state.mocks['@anthropic-ai/sdk']=class{constructor(){this.messages={create:async()=>({content:[{type:'text',text:JSON.stringify(analysis)}]})}}};
   state.mocks['@/lib/rendering/remotion']={startDarkLyricsRender:async(props)=>{renders.push(props);if(submissionFails)throw Error('submission response lost');return {id:'job',bucketName:'bucket',functionName:'function',region:'us-east-1'}}};
   state.mocks.fetch=async(url,options)=>{
     if(String(url).includes('creatomate.com')){renders.push(JSON.parse(options.body).source);return Response.json([{id:'job'}])}
     if(transcriptionFails) return new Response('failure',{status:500});
-    if(String(url).includes('transcriptions'))return Response.json({text:'lyrics',duration:10,words:[{word:'hello',start:0,end:1}]});
+    if(String(url).includes('transcriptions'))return Response.json({text:'lyrics',duration,words});
     return new Response('audio',{headers:{'content-type':'audio/mpeg'}});
   };
   const body={videoId,templateId:'13c51a59-7ad1-4669-a519-aa694f1b047f',title:'Song',artist:'Artist',captionStyle,fileUrl:`${origin}/storage/v1/object/public/uploads/${userId}/song.mp3`};
   return {rpc,renders,run:()=>load('src/app/api/process/route.ts',state.mocks).POST(request(body))};
 }
+
+for(const captionStyle of ['clean-neon','pixel-neon']) {
+  test(`${captionStyle}: clip and color payloads retain exact audio duration, including empty lyrics`,async()=>{
+    for(const backgroundType of ['color-block','neon']) for(const words of [[],[{word:'ending',start:9.95,end:11.5}]]){
+      const s=submission({captionStyle,backgroundType,duration:10.01,words,clips:[{url:'https://footage.test/clip.mp4'}]});
+      assert.equal((await s.run()).status,200);
+      const source=s.renders[0];assert.equal(source.duration,10.01);
+      const backgrounds=source.elements.filter(e=>e.name.startsWith('bg-')||e.name.startsWith('clip-'));
+      assert.ok(backgrounds.length>0);
+      for(const element of backgrounds){
+        assert.ok(element.duration>0);
+        assert.ok(element.time+element.duration<=10.01+1e-9);
+      }
+      const last=backgrounds[backgrounds.length-1];
+      assert.ok(Math.abs(last.time+last.duration-10.01)<1e-9);
+      assert.equal(source.elements.find(e=>e.name==='audio').duration,10.01);
+    }
+  });
+  test(`${captionStyle}: standard and premium output scale captions consistently`,async()=>{
+    let standard;
+    for(const plan of ['free','business','studio']){
+      const s=submission({captionStyle,backgroundType:'color-block',plan});
+      assert.equal((await s.run()).status,200);
+      const source=s.renders[0];const premium=plan!=='free';
+      assert.equal(source.width,premium?2160:1080);assert.equal(source.height,premium?3840:1920);
+      assert.equal(s.rpc[0].args.p_cost,premium?350:200);
+      const captions=source.elements.filter(e=>e.name.startsWith('neon'));
+      const serialized=JSON.stringify(captions);
+      if(standard) assert.equal(serialized,standard);else standard=serialized;
+      for(const element of captions){
+        assert.match(element.font_size,/ vmin$/);
+        assert.match(element.width,/%$/);assert.match(element.x,/%$/);assert.match(element.y,/%$/);
+        assert.equal(element.font_family,source.fonts[0].family);
+        assert.equal(element.font_weight,source.fonts[0].weight);
+      }
+      assert.equal(source.elements.filter(e=>e.name==='watermark').length,premium?0:1);
+    }
+  });
+}
+
+test('fractional cuts never round a beat beyond the audio endpoint',async()=>{
+  for(const backgroundType of ['color-block','neon','dark-solid']){
+    const s=submission({captionStyle:'clean-neon',backgroundType,duration:0.677,words:[],
+      analysis:{mood:'dark',cutInterval:0.675},clips:[{url:'https://footage.test/clip.mp4'}]});
+    assert.equal((await s.run()).status,200);
+    if(backgroundType==='dark-solid'){
+      assert.ok(s.renders[0].beats.every(beat=>beat>=0&&beat<0.677));
+    } else {
+      for(const element of s.renders[0].elements.filter(e=>e.name.startsWith('bg-')||e.name.startsWith('clip-'))){
+        assert.ok(element.duration>0);assert.ok(element.time<0.677);
+      }
+    }
+  }
+});
 test('reservation rejection stops submission before renderer work',async()=>{
   const s=submission({reservation:'already_submitted'});assert.equal((await s.run()).status,409);assert.equal(s.renders.length,0);assert.equal(s.rpc.length,1);
 });

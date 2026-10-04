@@ -130,7 +130,8 @@ export async function POST(request: Request) {
       const beats: number[] = [];
       let t = 0;
       while (t < songDuration) {
-        beats.push(parseFloat(t.toFixed(2)));
+        const beat = parseFloat(t.toFixed(2));
+        if (beat < songDuration) beats.push(beat);
         const currentSection = sections.find((s) => t >= s.startTime && t < s.endTime);
         let interval = cutInterval;
         if (currentSection) {
@@ -310,7 +311,8 @@ function generateBeatTimestamps(
   let t = 0;
 
   while (t < songDuration) {
-    beats.push(parseFloat(t.toFixed(2)));
+    const beat = parseFloat(t.toFixed(2));
+    if (beat < songDuration) beats.push(beat);
     const currentSection = sections.find((s) => t >= s.startTime && t < s.endTime);
     let interval = cutInterval;
     if (currentSection) {
@@ -384,7 +386,7 @@ async function startRender({
         shape: "rectangle",
         track: 1,
         time: beat,
-        duration: (nextBeat - beat) + 0.05,
+        duration: Math.min((nextBeat - beat) + 0.05, songDuration - beat),
         width: "100%",
         height: "100%",
         x: "50%",
@@ -419,7 +421,7 @@ async function startRender({
         type: "video",
         track: 1,
         time: beat,
-        duration: (nextBeat - beat) + 0.05,
+        duration: Math.min((nextBeat - beat) + 0.05, songDuration - beat),
         source: availableClips[i % availableClips.length].url,
         fit: "cover",
       };
@@ -553,6 +555,7 @@ async function startRender({
     body: JSON.stringify({
       source: {
         output_format: "mp4",
+        duration: songDuration,
         width,
         height,
         ...(isNeonStyle(captionStyle) ? { fonts: [{ family: neonDesign(captionStyle).family, weight: neonDesign(captionStyle).weight, style: "normal", source: neonDesign(captionStyle).fontUrl }] } : {}),
@@ -563,6 +566,7 @@ async function startRender({
             type: "audio",
             track: 3,
             time: 0,
+            duration: songDuration,
             source: fileUrl,
           },
           ...captionElements,
