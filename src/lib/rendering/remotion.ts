@@ -9,6 +9,12 @@ function config() {
   return { region: region as Parameters<typeof renderMediaOnLambda>[0]["region"], functionName, serveUrl };
 }
 
+// Validate before reserving credits or doing transcription. A missing local
+// setting is a known pre-submission failure, not an uncertain provider result.
+export function assertDarkLyricsConfigured() {
+  config();
+}
+
 export async function startDarkLyricsRender(inputProps: DarkLyricsProps) {
   const { region, functionName, serveUrl } = config();
   const result = await renderMediaOnLambda({

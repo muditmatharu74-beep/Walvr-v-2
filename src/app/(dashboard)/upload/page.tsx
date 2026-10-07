@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { MAX_UPLOAD_BYTES, AUDIO_EXTENSIONS } from "@/lib/rendering/upload";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -34,8 +34,17 @@ export default function UploadPage() {
   const [selectedCaption, setSelectedCaption] = useState("bold-overlay");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const submittingRef = useRef(false);
   const [userPlan, setUserPlan] = useState("free");
   const [userCredits, setUserCredits] = useState(0);
+
+  useEffect(() => {
+    if (error) {
+      errorRef.current?.focus({ preventScroll: true });
+      errorRef.current?.scrollIntoView({ block: "center" });
+    }
+  }, [error]);
 
   useEffect(() => {
     async function load() {
@@ -75,7 +84,8 @@ export default function UploadPage() {
   }
 
   async function handleSubmit() {
-    if (!file || !selectedTemplate) return;
+    if (!file || !selectedTemplate || submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     setError("");
 
@@ -137,6 +147,7 @@ export default function UploadPage() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
+      submittingRef.current = false;
     }
   }
 
@@ -202,7 +213,7 @@ export default function UploadPage() {
           ))}
         </div>
 
-        {error && <p role="alert" style={{ color: "#f5b2bc", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</p>}
+        {error && <p ref={errorRef} tabIndex={-1} role="alert" style={{ color: "#f5b2bc", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</p>}
 
         {/* Step 1 — Upload */}
         {step === "upload" && (

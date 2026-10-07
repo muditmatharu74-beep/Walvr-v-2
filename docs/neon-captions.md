@@ -60,3 +60,10 @@ The browser check measures actual font glyph widths at phone size using the shar
 Creatomate sources and audio elements explicitly use the measured song duration. Background segments retain their 50 ms overlap between cuts but stop at the song end. Automatic source duration could otherwise follow a background overlap or a lyric timestamp extending past the audio.
 
 Mocked route tests cover color and footage payloads with empty lyrics and an overlong final caption, fractional audio duration, 1080p/4K output, font/position scaling, plan pricing and free-plan watermark behavior for both neon styles. These verify the submitted instructions, not live Creatomate output. Font registration and relative sizing follow the official [custom font](https://creatomate.com/docs/api/quick-start/use-a-custom-font) and [text element](https://creatomate.com/docs/api/render-script/text-element) documentation; explicit source duration follows the [RenderScript quick start](https://creatomate.com/docs/api/quick-start/create-a-video-by-render-script).
+
+## Preview renderer configuration
+
+Dark Lyrics validates local renderer settings before credit reservation or transcription. Missing settings return HTTP 503 with `RENDERER_NOT_CONFIGURED` and an actionable message. Upload errors scroll into view, receive focus and are announced; a submission lock prevents concurrent clicks from starting separate uploads.
+
+The old `walvr-render-fix` Lambda site does not contain the neon styles. `scripts/publish-neon-preview.cjs` bundles the current composition and its fonts into a separate, commit-specific site in the existing Remotion bucket. Run it only as a reviewed Vercel preview build command (`node scripts/publish-neon-preview.cjs && npm run build`) after setting a branch-specific `REMOTION_SERVE_URL` to the expected commit-specific path. It rejects production, other branches, mismatched destinations and existing mismatched sites. Credentials remain in the deployment environment. Normal build commands do not publish AWS resources. The production renderer URL and Lambda function are not changed.
+

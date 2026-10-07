@@ -158,7 +158,7 @@ test('submission rejects another owner and already-submitted videos before paid 
   assert.equal(running.providerCalls.length, 0);
 });
 
-function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false, submissionFails=false, captionStyle='bold-overlay', backgroundType='dark-solid', plan='free', duration=10, words=[{word:'hello',start:0,end:1}], clips=[], analysis={mood:'dark',energy:'low'} }={}) {
+function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false, submissionFails=false, rendererConfigured=true, captionStyle='bold-overlay', backgroundType='dark-solid', plan='free', duration=10, words=[{word:'hello',start:0,end:1}], clips=[], analysis={mood:'dark',energy:'low'} }={}) {
   const state=setup(); const rpc=[]; const renders=[];
   const db={
     async rpc(name,args){rpc.push({name,args});return {data:name==='reserve_video_credits'?{status:reservation,credits:400}:{status:'error'},error:null}},
@@ -170,7 +170,7 @@ function submission({ reservation='reserved', transcriptionFails=false, tracking
   };
   state.mocks['@supabase/supabase-js']={createClient:()=>db};
   state.mocks['@anthropic-ai/sdk']=class{constructor(){this.messages={create:async()=>({content:[{type:'text',text:JSON.stringify(analysis)}]})}}};
-  state.mocks['@/lib/rendering/remotion']={startDarkLyricsRender:async(props)=>{renders.push(props);if(submissionFails)throw Error('submission response lost');return {id:'job',bucketName:'bucket',functionName:'function',region:'us-east-1'}}};
+  state.mocks['@/lib/rendering/remotion']={assertDarkLyricsConfigured:()=>{if(!rendererConfigured)throw Error('Missing render configuration')},startDarkLyricsRender:async(props)=>{renders.push(props);if(submissionFails)throw Error('submission response lost');return {id:'job',bucketName:'bucket',functionName:'function',region:'us-east-1'}}};
   state.mocks.fetch=async(url,options)=>{
     if(String(url).includes('creatomate.com')){renders.push(JSON.parse(options.body).source);return Response.json([{id:'job'}])}
     if(transcriptionFails) return new Response('failure',{status:500});
@@ -236,6 +236,16 @@ test('fractional cuts never round a beat beyond the audio endpoint',async()=>{
 });
 test('reservation rejection stops submission before renderer work',async()=>{
   const s=submission({reservation:'already_submitted'});assert.equal((await s.run()).status,409);assert.equal(s.renders.length,0);assert.equal(s.rpc.length,1);
+});
+test('missing renderer configuration stops before charging credits or submitting a job',async()=>{
+  for(const captionStyle of ['clean-neon','pixel-neon']){
+    const s=submission({captionStyle,rendererConfigured:false});const response=await s.run();
+    assert.equal(response.status,503);const body=await response.json();
+    assert.equal(body.code,'RENDERER_NOT_CONFIGURED');assert.match(body.error,/not been charged/);
+    assert.equal(s.rpc.length,0);assert.equal(s.renders.length,0);
+  }
+  const other=submission({backgroundType:'color-block',rendererConfigured:false});
+  assert.equal((await other.run()).status,200);
 });
 test('pre-render processing failure uses the atomic refund transaction',async()=>{
   const s=submission({transcriptionFails:true});assert.equal((await s.run()).status,500);assert.equal(s.rpc[1].name,'settle_video_credits');assert.equal(s.rpc[1].args.p_render_id,null);assert.equal(s.renders.length,0);

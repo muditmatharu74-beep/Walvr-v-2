@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createClient as createSessionClient } from "@/lib/supabase/server";
-import { startDarkLyricsRender } from "@/lib/rendering/remotion";
+import { assertDarkLyricsConfigured, startDarkLyricsRender } from "@/lib/rendering/remotion";
 import { songDuration as getSongDuration } from "@/lib/rendering/timing";
 import { ownedUploadUrl, MAX_UPLOAD_BYTES } from "@/lib/rendering/upload";
 
@@ -75,6 +75,16 @@ export async function POST(request: Request) {
       const templatePlanIndex = planOrder.indexOf(template.plan_required);
       if (userPlanIndex < 0 || templatePlanIndex < 0 || userPlanIndex < templatePlanIndex) {
         return NextResponse.json({ error: "Template not available on your plan" }, { status: 403 });
+      }
+    }
+
+    if (template.background_type === "dark-solid") {
+      try { assertDarkLyricsConfigured(); }
+      catch {
+        return NextResponse.json({
+          error: "This template is temporarily unavailable. Your credits have not been charged.",
+          code: "RENDERER_NOT_CONFIGURED",
+        }, { status: 503 });
       }
     }
 
