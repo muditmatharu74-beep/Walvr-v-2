@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { MAX_UPLOAD_BYTES, AUDIO_EXTENSIONS } from "@/lib/rendering/upload";
+import { confirmSubmission } from "@/lib/rendering/submission-response";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -131,18 +132,7 @@ export default function UploadPage() {
         }),
       });
 
-      if (res.status === 403) {
-        const data = await res.json();
-        if (data.error === "Not enough credits. Top up to continue.") {
-          throw new Error(`Not enough credits. You need ${data.required} credits but only have ${data.credits}. Go to Settings to top up.`);
-        }
-        throw new Error("You've reached your limit. Upgrade your plan to continue.");
-      }
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "Video processing failed. Please try again.");
-      }
+      await confirmSubmission(res);
       router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
