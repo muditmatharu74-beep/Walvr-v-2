@@ -55,7 +55,8 @@ async function run(env, args) {
     };
     vm.runInNewContext(code, {module: mod, exports: mod.exports, require: scopedRequire,
       process, URL, Response, Request, Blob, FormData, Uint8Array, AbortSignal, fetch, crypto,
-      console: {info: (label) => console.log(label), error: (label, error) => console.error(label, error?.message || 'diagnostic error')},
+      console: {info: (label) => console.log(label), error: (label, error) => console.error(label,
+        Array.isArray(error) ? JSON.stringify(error.map(e => typeof e === 'string' ? e : e?.message || e?.name || 'provider error')) : error?.message || 'diagnostic error')},
     }, {filename: file});
     return mod.exports;
   }
@@ -71,7 +72,10 @@ async function run(env, args) {
   for (let attempt = 0; attempt < 120; attempt++) {
     video = check(await db.from('videos').select('*').eq('id', retryId).eq('user_id', owner).single());
     if (video.status === 'done') { console.log(JSON.stringify({videoId: retryId, status: 'done'})); return; }
-    if (video.status === 'error') throw Error('Retry render failed; credits settled by the standard transaction');
+    if (video.status === 'error') {
+      if (video.render_id) await readRenderStatus(video);
+      throw Error('Retry render failed; credits settled by the standard transaction');
+    }
     if (video.status !== 'rendering' || !video.render_id) throw Error('Retry needs reconciliation; no resubmission performed');
     let progress;
     try { progress = await readRenderStatus(video); }

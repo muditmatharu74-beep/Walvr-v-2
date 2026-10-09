@@ -1,5 +1,6 @@
 import { getRenderProgress, renderMediaOnLambda } from "@remotion/lambda/client";
 import type { DarkLyricsProps } from "../../remotion/DarkLyrics";
+import { durationInFrames } from "./timing";
 
 function config() {
   const region = process.env.REMOTION_AWS_REGION ?? "us-east-1";
@@ -21,7 +22,10 @@ export async function startDarkLyricsRender(inputProps: DarkLyricsProps) {
     region, functionName, serveUrl,
     composition: "DarkLyrics", inputProps,
     codec: "h264", imageFormat: "jpeg", maxRetries: 1,
-    framesPerLambda: 20, concurrencyPerLambda: 1,
+    // Remotion caps a render at 200 functions. Fixed 20-frame batches exceed
+    // that limit for songs longer than 133 seconds at 30 fps.
+    framesPerLambda: Math.max(20, Math.ceil(durationInFrames(inputProps.songDuration) / 200)),
+    concurrencyPerLambda: 1,
     outName: `dark-lyrics-${crypto.randomUUID()}.mp4`,
     timeoutInMilliseconds: 120000,
   });
