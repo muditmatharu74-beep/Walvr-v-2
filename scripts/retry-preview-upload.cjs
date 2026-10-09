@@ -8,21 +8,24 @@ const ts = require('typescript');
 function validate(env, args) {
   if (env.VERCEL_ENV !== 'preview' || env.VERCEL_GIT_COMMIT_REF !== 'feature/neon-captions' ||
       env.VERCEL_PROJECT_ID !== 'prj_kY2qEWWysNEfqRKzI7irzqRYs7eg') throw Error('Preview diagnostic scope mismatch');
-  const [owner, sourceId, retryId, filename] = args;
+  const [owner, sourceId, retryId, filename, captionOverride] = args;
   const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/;
-  if (args.length !== 4 || ![owner, sourceId, retryId].every(v => uuid.test(v || '')) ||
-      sourceId === retryId || !/^\d+\.mp3$/.test(filename || '')) throw Error('Invalid retry identifiers');
-  return {owner, sourceId, retryId, filename};
+  if (![4,5].includes(args.length) || ![owner, sourceId, retryId].every(v => uuid.test(v || '')) ||
+      sourceId === retryId || !/^\d+\.mp3$/.test(filename || '') ||
+      (captionOverride !== undefined && !['clean-neon','pixel-neon'].includes(captionOverride))) throw Error('Invalid retry identifiers');
+  return {owner, sourceId, retryId, filename, captionOverride};
 }
 
 async function run(env, args) {
-  const {owner, sourceId, retryId, filename} = validate(env, args);
+  const {owner, sourceId, retryId, filename, captionOverride} = validate(env, args);
   const {createClient} = require('@supabase/supabase-js');
   const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
   const check = result => { if (result.error) throw Error(result.error.message); return result.data; };
   const source = check(await db.from('videos').select('*').eq('id', sourceId).eq('user_id', owner).single());
-  if (source.status !== 'error' || source.render_id || source.clip_style !== 'dark-solid') throw Error('Source is not a confirmed failed Dark Lyrics upload');
-  if (!['clean-neon', 'pixel-neon'].includes(source.cap_style)) throw Error('Unsupported retry caption style');
+  if (!((source.status === 'error' && !source.render_id) || (source.status === 'done' && source.render_url)) ||
+      source.clip_style !== 'dark-solid') throw Error('Source is not a terminal Dark Lyrics upload');
+  const captionStyle = captionOverride || source.cap_style;
+  if (!['clean-neon', 'pixel-neon'].includes(captionStyle)) throw Error('Unsupported retry caption style');
   const uploadedAt = Number(filename.split('.')[0]);
   if (Math.abs(Date.parse(source.created_at) - uploadedAt) > 5000) throw Error('Upload does not match the failed attempt');
   const objects = check(await db.storage.from('uploads').list(owner, {search: filename}));
@@ -30,9 +33,9 @@ async function run(env, args) {
   const fileUrl = db.storage.from('uploads').getPublicUrl(`${owner}/${filename}`).data.publicUrl;
   let video = check(await db.from('videos').select('*').eq('id', retryId).eq('user_id', owner).maybeSingle());
   if (!video) video = check(await db.from('videos').insert({id: retryId, user_id: owner,
-    title: source.title, artist: source.artist, cap_style: source.cap_style, clip_style: source.clip_style,
+    title: source.title, artist: source.artist, cap_style: captionStyle, clip_style: source.clip_style,
     template: source.template, status: 'pending'}).select().single());
-  if (video.template !== source.template || video.cap_style !== source.cap_style) throw Error('Retry metadata mismatch');
+  if (video.template !== source.template || video.cap_style !== captionStyle) throw Error('Retry metadata mismatch');
 
   const cache = new Map();
   function load(file) {
@@ -63,7 +66,7 @@ async function run(env, args) {
   if (video.status === 'pending') {
     const response = await load('src/app/api/process/route.ts').POST(new Request('https://preview.invalid/api/process', {
       method: 'POST', body: JSON.stringify({videoId: retryId, templateId: source.template,
-        fileUrl, title: source.title, artist: source.artist || '', captionStyle: source.cap_style}),
+        fileUrl, title: source.title, artist: source.artist || '', captionStyle}),
     }));
     const result = await response.json();
     if (!response.ok) throw Error(`Retry submission HTTP ${response.status}: ${result.error}`);

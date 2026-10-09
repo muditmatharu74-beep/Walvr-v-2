@@ -13,4 +13,6 @@ test('administrator retry requires distinct fixed IDs and an owned filename', ()
   for (const bad of [args.slice(0,3), [...args.slice(0,3),'../123.mp3'], [args[0],args[1],args[1],args[3]], ['invalid',...args.slice(1)]]) {
     assert.throws(() => validate(env,bad), /Invalid retry/);
   }
+  assert.equal(validate(env,[...args,'pixel-neon']).captionOverride,'pixel-neon');
+  assert.throws(()=>validate(env,[...args,'unknown']),/Invalid retry/);
 });

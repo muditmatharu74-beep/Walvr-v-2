@@ -23,6 +23,7 @@ function load(file, mocks = {}) {
 const timing = load('src/lib/rendering/timing.ts');
 const upload = load('src/lib/rendering/upload.ts');
 const neonCaptions = load('src/lib/rendering/neon-captions.ts');
+const transcriptionQuality = load('src/lib/rendering/transcription-quality.ts');
 const userId = '9e87c63d-2535-4a00-be94-6dae6899a4ab';
 const videoId = '93a4e653-ae1f-4b67-9dc6-1dde9ed3f238';
 const origin = 'https://example.supabase.co';
@@ -74,6 +75,7 @@ function setup({ user = { id: userId }, video = null, progress = {}, progressErr
     '@/lib/rendering/timing': timing,
     '@/lib/rendering/upload': upload,
     '@/lib/rendering/neon-captions': neonCaptions,
+    '@/lib/rendering/transcription-quality': transcriptionQuality,
     '@anthropic-ai/sdk': class { constructor() {} },
     fetch: async (url) => { providerCalls.push(url); return Response.json(fetchResult); },
   };
@@ -249,6 +251,12 @@ test('missing renderer configuration stops before charging credits or submitting
 });
 test('pre-render processing failure uses the atomic refund transaction',async()=>{
   const s=submission({transcriptionFails:true});assert.equal((await s.run()).status,500);assert.equal(s.rpc[1].name,'settle_video_credits');assert.equal(s.rpc[1].args.p_render_id,null);assert.equal(s.renders.length,0);
+});
+test('symbol-only transcripts stop before rendering and return the reserved credits',async()=>{
+  const s=submission({captionStyle:'clean-neon',words:[{word:'♪♪',start:0,end:1}]});
+  const response=await s.run();assert.equal(response.status,422);
+  const body=await response.json();assert.equal(body.code,'TRANSCRIPTION_UNUSABLE');assert.equal(body.creditsRefunded,true);
+  assert.equal(s.renders.length,0);assert.equal(s.rpc.length,2);assert.equal(s.rpc[1].name,'settle_video_credits');
 });
 test('successful submission uses reservation balance without a second debit',async()=>{
   const s=submission();const r=await s.run();assert.equal(r.status,200);assert.equal((await r.json()).creditsRemaining,400);assert.equal(s.rpc.length,1);assert.equal(s.renders.length,1);

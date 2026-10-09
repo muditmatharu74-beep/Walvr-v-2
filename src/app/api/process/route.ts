@@ -6,6 +6,7 @@ import { createClient as createSessionClient } from "@/lib/supabase/server";
 import { assertDarkLyricsConfigured, startDarkLyricsRender } from "@/lib/rendering/remotion";
 import { songDuration as getSongDuration } from "@/lib/rendering/timing";
 import { ownedUploadUrl, MAX_UPLOAD_BYTES } from "@/lib/rendering/upload";
+import { assertUsableTranscription, TranscriptionQualityError } from "@/lib/rendering/transcription-quality";
 
 import { CAPTION_STYLE_IDS, creditCost as getCreditCost, isNeonStyle, neonDesign, neonTextElements } from "@/lib/rendering/neon-captions";
 
@@ -105,6 +106,7 @@ export async function POST(request: Request) {
     claimed = true;
 
     const transcription = await transcribeAudio(fileUrl);
+    assertUsableTranscription(transcription, isNeonStyle(captionStyle));
     const analysis = await analyzeWithClaude({ title, artist, lyrics: transcription.text });
 
     const { error: analysisError } = await supabase
@@ -186,12 +188,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, renderId: render.id, creditsRemaining });
   } catch (err) {
     console.error("Process error:", err);
+    let creditsRefunded = false;
     if (claimed && !renderStarted && videoId && userId) {
       const { error: refundError } = await supabase.rpc("settle_video_credits", {
         p_user_id: userId, p_video_id: videoId, p_status: "error", p_render_id: null, p_url: null,
       });
       if (refundError) console.error("Render refund requires reconciliation", { videoId, refundError });
+      else creditsRefunded = true;
     }
+    if (err instanceof TranscriptionQualityError) return NextResponse.json({
+      error: err.message + (creditsRefunded ? " Your credits have been returned." : ""),
+      code: "TRANSCRIPTION_UNUSABLE", creditsRefunded,
+    }, { status: 422 });
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
 }
