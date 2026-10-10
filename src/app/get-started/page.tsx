@@ -83,21 +83,18 @@ const PLANS = [
     id: "starter",
     name: "Starter",
     monthlyPrice: 9,
-    annualPrice: 90,
     features: ["1,500 credits/month", "15 basic or 7 standard/neon videos", "No watermark", "1080p export", "3 templates"],
   },
   {
     id: "pro",
     name: "Pro",
     monthlyPrice: 19,
-    annualPrice: 190,
     features: ["3,000 credits/month", "30 basic or 15 standard/neon videos", "No watermark", "1080p export", "All templates", "Priority support"],
   },
   {
     id: "business",
     name: "Business",
     monthlyPrice: 49,
-    annualPrice: 490,
     features: ["8,000 credits/month", "22 videos at 350 credits each", "No watermark", "4K export", "All templates", "New templates monthly"],
   },
 ];
@@ -107,7 +104,6 @@ export default function GetStartedPage() {
   const [quizStep, setQuizStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
-  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
 
   function handleAnswer(questionId: string, value: string) {
     const newAnswers = { ...answers, [questionId]: value };
@@ -254,24 +250,14 @@ export default function GetStartedPage() {
               </div>
             </div>
 
-            {/* Billing toggle */}
-            <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "2rem" }}>
-              <div style={{ display: "flex", background: "rgba(13,3,5,0.6)", border: "1px solid rgba(200,16,46,0.12)", padding: "4px" }}>
-                {(["monthly", "annual"] as const).map((b) => (
-                  <button key={b} onClick={() => setBilling(b)} style={{ padding: "0.5rem 1.25rem", background: billing === b ? "#8b0014" : "transparent", color: billing === b ? "#f5f0eb" : "rgba(245,240,235,0.35)", border: "none", fontSize: "0.7rem", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", transition: "all 0.2s", fontFamily: "'Georgia', serif" }}>{b}</button>
-                ))}
-              </div>
-              {billing === "annual" && (
-                <span style={{ fontSize: "0.65rem", letterSpacing: "0.15em", textTransform: "uppercase", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)", padding: "0.25rem 0.75rem" }}>2 months free</span>
-              )}
-            </div>
+            <p style={{ color: "rgba(245,240,235,0.4)", fontSize: "0.8rem", marginBottom: "2.5rem" }}>Monthly subscription. Confirm the recurring price at checkout.</p>
 
             {/* Plans */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1px", background: "rgba(200,16,46,0.08)", marginBottom: "2rem" }}>
               {PLANS.map((p) => {
                 const isRec = p.id === recommendation.plan;
-                const price = billing === "annual" ? p.annualPrice : p.monthlyPrice;
-                const period = billing === "annual" ? "/year" : "/month";
+                const price = p.monthlyPrice;
+                const period = "/month";
 
                 return (
                   <div key={p.id} style={{
@@ -292,9 +278,6 @@ export default function GetStartedPage() {
                     <div style={{ marginBottom: "2rem" }}>
                       <span style={{ fontSize: "3rem", fontWeight: "700", color: "#f5f0eb", letterSpacing: "-0.03em" }}>${price}</span>
                       <span style={{ color: "rgba(245,240,235,0.3)", fontSize: "0.85rem" }}>{period}</span>
-                      {billing === "annual" && (
-                        <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.25)", marginTop: "0.25rem" }}>${Math.round(price / 12)}/mo billed annually</p>
-                      )}
                     </div>
 
                     <ul style={{ listStyle: "none", padding: 0, marginBottom: "2rem" }}>
@@ -307,7 +290,7 @@ export default function GetStartedPage() {
                     </ul>
 
                     <Link
-                      href={`/signup?plan=${p.id}&billing=${billing}`}
+                      href={`/signup?plan=${p.id}&billing=monthly`}
                       style={{
                         display: "block",
                         textAlign: "center",
