@@ -47,6 +47,7 @@ export default function SettingsPage() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [billingError, setBillingError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   const [quizStep, setQuizStep] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
@@ -66,16 +67,23 @@ export default function SettingsPage() {
     load();
   }, []);
 
-  async function handleUpgrade(priceId: string) {
+  async function handleUpgrade(planId: string) {
     setLoading(true);
-    const res = await fetch("/api/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ priceId }),
-    });
-    const data = await res.json();
-    if (data.url) router.push(data.url);
-    else setLoading(false);
+    setBillingError("");
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) throw new Error(data.error || "Checkout is unavailable. Please try again later.");
+      router.push(data.url);
+    } catch (error) {
+      setBillingError(error instanceof Error ? error.message : "Checkout is unavailable. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleSignOut() {
@@ -104,7 +112,6 @@ export default function SettingsPage() {
       id: "starter",
       name: "Starter",
       monthlyPrice: 9,
-      priceId: process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID ?? "",
       features: ["1,500 credits/month", "15 basic or 7 standard/neon videos", "No watermark", "1080p export", "3 templates"],
       cta: "Get Starter",
     },
@@ -112,7 +119,6 @@ export default function SettingsPage() {
       id: "pro",
       name: "Pro",
       monthlyPrice: 19.99,
-      priceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID ?? "",
       features: ["3,000 credits/month", "30 basic or 15 standard/neon videos", "No watermark", "1080p export", "All templates", "Priority support"],
       cta: "Get Pro",
     },
@@ -120,7 +126,6 @@ export default function SettingsPage() {
       id: "business",
       name: "Business",
       monthlyPrice: 49.99,
-      priceId: process.env.NEXT_PUBLIC_STRIPE_BUSINESS_PRICE_ID ?? "",
       features: ["8,000 credits/month", "22 videos at 350 credits each", "No watermark", "4K export", "All templates", "Priority support", "New templates monthly"],
       cta: "Get Business",
     },
@@ -241,6 +246,7 @@ export default function SettingsPage() {
             <p style={{ color: "rgba(245,240,235,0.4)", fontSize: "0.8rem", marginBottom: "2.5rem" }}>Monthly subscription. Confirm the recurring price at checkout.</p>
 
             {/* Plans */}
+            {billingError && <p role="alert" style={{ color: "#fca5a5", marginBottom: "1rem" }}>{billingError}</p>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1px", background: "rgba(200,16,46,0.08)", marginBottom: "4rem" }}>
               {plans.map((p) => {
                 const isCurrent = plan === p.id;
@@ -284,7 +290,7 @@ export default function SettingsPage() {
                     </ul>
 
                     <button
-                      onClick={() => !isCurrent && p.priceId && handleUpgrade(p.priceId)}
+                      onClick={() => !isCurrent && handleUpgrade(p.id)}
                       disabled={isCurrent || loading}
                       style={{
                         width: "100%",

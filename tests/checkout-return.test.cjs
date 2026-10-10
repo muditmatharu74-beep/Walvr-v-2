@@ -16,7 +16,7 @@ function load(file, env, mocks = {}) {
   return mod.exports;
 }
 
-async function submit(kind, env, authenticated = true) {
+async function submit(kind, env, authenticated = true, body = {priceId: 'configured', returnUrl: 'https://attacker.example'}) {
   const calls = [];
   const stripe = {checkout: {sessions: {create: async args => {
     calls.push(args); return {url: 'https://checkout.stripe.com/example'};
@@ -27,14 +27,14 @@ async function submit(kind, env, authenticated = true) {
   const mocks = {
     stripe: class {constructor() {return stripe}},
     '@/lib/supabase/server': {createClient: async () => db},
-    '@/lib/billing/prices': {subscriptionPlan: () => ({plan: 'pro', credits: 3000}), topupCredits: () => 500},
+    '@/lib/billing/prices': {subscriptionPlan: id => id ? ({plan: 'pro', credits: 3000}) : undefined, topupCredits: () => 500},
     '@/lib/billing/checkout-origin': load('src/lib/billing/checkout-origin.ts', env),
     'next/server': {NextResponse: {json: (body, init) => Response.json(body, init)}},
   };
   const route = load(`src/app/api/${kind}/route.ts`, env, mocks);
   const response = await route.POST(new Request('https://attacker.example/api/' + kind, {
     method: 'POST', headers: {Origin: 'https://attacker.example', Host: 'attacker.example'},
-    body: JSON.stringify({priceId: 'configured', returnUrl: 'https://attacker.example'}),
+    body: JSON.stringify(body),
   }));
   return {response, calls};
 }
@@ -75,5 +75,17 @@ test('unauthenticated checkout cannot create a payment session', async () => {
     const result = await submit(kind, {VERCEL_ENV: 'preview', VERCEL_URL: 'walvr-reviewed.vercel.app'}, false);
     assert.equal(result.response.status, 401);
     assert.equal(result.calls.length, 0);
+  }
+});
+
+test('plan checkout selects the server price and rejects unknown or unconfigured plans before Stripe', async () => {
+  const env = {VERCEL_ENV: 'preview', VERCEL_URL: 'walvr-reviewed.vercel.app', STRIPE_BUSINESS_PRICE_ID: 'server_business'};
+  const result = await submit('checkout', env, true, {planId: 'business', priceId: 'mismatched_browser_price'});
+  assert.equal(result.response.status, 200);
+  assert.equal(result.calls[0].line_items[0].price, 'server_business');
+  for (const planId of ['fake', 'starter', 123, null]) {
+    const failed = await submit('checkout', env, true, {planId});
+    assert.equal(failed.response.status, 400);
+    assert.equal(failed.calls.length, 0);
   }
 });

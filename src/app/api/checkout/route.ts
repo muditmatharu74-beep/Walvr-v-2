@@ -10,7 +10,13 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export async function POST(request: Request) {
   try {
-    const { priceId } = await request.json();
+    const { priceId: suppliedPriceId, planId } = await request.json();
+    // New clients choose a plan; only the server selects its configured price.
+    // Keep the allowlisted price-ID path for older tabs.
+    if (planId !== undefined && !["starter", "pro", "business", "studio"].includes(planId)) {
+      return NextResponse.json({ error: "Unknown plan" }, { status: 400 });
+    }
+    const priceId = planId === undefined ? suppliedPriceId : process.env[`STRIPE_${planId.toUpperCase()}_PRICE_ID`];
 
     if (!subscriptionPlan(priceId)) return NextResponse.json({ error: "Unknown price" }, { status: 400 });
 
