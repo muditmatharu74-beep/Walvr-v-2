@@ -70,3 +70,18 @@ References: [Demucs](https://github.com/facebookresearch/demucs),
 [WhisperX](https://github.com/m-bain/whisperX),
 [faster-whisper](https://github.com/SYSTRAN/faster-whisper),
 [librosa beat tracking](https://librosa.org/doc/latest/generated/librosa.beat.beat_track.html).
+
+## Human timing review
+
+For an analyzed song, generate a private excerpt with the original audio and
+one word shown per aligned interval:
+
+```sh
+python experiments/vocal-timing/render_review.py /private/song.mp3 \
+  /private/song-analysis.json /private/timing-review.mp4 --start 10 --seconds 30
+```
+
+This simple ffmpeg/libass clip checks timing, not the production Remotion layout
+or final background design. It does not consume render credits. Review the
+first word, fast passages, sustained notes and caption-free gaps against the
+singer. A human review is still required even if all words receive timestamps.
