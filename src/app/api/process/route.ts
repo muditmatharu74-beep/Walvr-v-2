@@ -3,15 +3,18 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createClient as createSessionClient } from "@/lib/supabase/server";
-import { startDarkLyricsRender } from "@/lib/rendering/remotion";
+import { assertDarkLyricsConfigured, startDarkLyricsRender } from "@/lib/rendering/remotion";
 import { songDuration as getSongDuration } from "@/lib/rendering/timing";
 import { ownedUploadUrl, MAX_UPLOAD_BYTES } from "@/lib/rendering/upload";
+import { assertUsableTranscription, TranscriptionQualityError } from "@/lib/rendering/transcription-quality";
+
+import { CAPTION_STYLE_IDS, creditCost as getCreditCost, isNeonStyle, neonDesign, neonTextElements } from "@/lib/rendering/neon-captions";
 
 const requestSchema = z.object({
   videoId: z.string().uuid(), templateId: z.string().uuid(),
   fileUrl: z.string().url(), title: z.string().trim().min(1).max(300),
   artist: z.string().max(300).default(""),
-  captionStyle: z.enum(["bold-overlay", "word-highlight", "frosted", "minimal", "karaoke"]),
+  captionStyle: z.enum(CAPTION_STYLE_IDS),
 });
 
 const anthropic = new Anthropic({
@@ -76,6 +79,16 @@ export async function POST(request: Request) {
       }
     }
 
+    if (template.background_type === "dark-solid") {
+      try { assertDarkLyricsConfigured(); }
+      catch {
+        return NextResponse.json({
+          error: "This template is temporarily unavailable. Your credits have not been charged.",
+          code: "RENDERER_NOT_CONFIGURED",
+        }, { status: 503 });
+      }
+    }
+
     const creditCost = getCreditCost(plan, template?.background_type, captionStyle);
 
     if (currentCredits < creditCost) {
@@ -93,6 +106,7 @@ export async function POST(request: Request) {
     claimed = true;
 
     const transcription = await transcribeAudio(fileUrl);
+    assertUsableTranscription(transcription, isNeonStyle(captionStyle));
     const analysis = await analyzeWithClaude({ title, artist, lyrics: transcription.text });
 
     const { error: analysisError } = await supabase
@@ -128,7 +142,8 @@ export async function POST(request: Request) {
       const beats: number[] = [];
       let t = 0;
       while (t < songDuration) {
-        beats.push(parseFloat(t.toFixed(2)));
+        const beat = parseFloat(t.toFixed(2));
+        if (beat < songDuration) beats.push(beat);
         const currentSection = sections.find((s) => t >= s.startTime && t < s.endTime);
         let interval = cutInterval;
         if (currentSection) {
@@ -140,7 +155,7 @@ export async function POST(request: Request) {
       }
 
       render = await startDarkLyricsRender({
-        captions: transcription.words ?? [], beats, songDuration, audioUrl: fileUrl,
+        captions: transcription.words ?? [], beats, songDuration, audioUrl: fileUrl, captionStyle,
       });
     } else {
       render = await startRender({
@@ -173,23 +188,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, renderId: render.id, creditsRemaining });
   } catch (err) {
     console.error("Process error:", err);
+    let creditsRefunded = false;
     if (claimed && !renderStarted && videoId && userId) {
       const { error: refundError } = await supabase.rpc("settle_video_credits", {
         p_user_id: userId, p_video_id: videoId, p_status: "error", p_render_id: null, p_url: null,
       });
       if (refundError) console.error("Render refund requires reconciliation", { videoId, refundError });
+      else creditsRefunded = true;
     }
+    if (err instanceof TranscriptionQualityError) return NextResponse.json({
+      error: err.message + (creditsRefunded ? " Your credits have been returned." : ""),
+      code: "TRANSCRIPTION_UNUSABLE", creditsRefunded,
+    }, { status: 422 });
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
-}
-
-function getCreditCost(plan: string, backgroundType?: string, captionStyle?: string): number {
-  const isPremiumPlan = plan === "business" || plan === "studio";
-  const isBasicTemplate = backgroundType === "color-block" || backgroundType === "dark-solid";
-  const isBasicCaption = captionStyle === "bold-overlay" || captionStyle === "minimal";
-  if (isPremiumPlan) return 350;
-  if (isBasicTemplate && isBasicCaption) return 100;
-  return 200;
 }
 
 async function transcribeAudio(fileUrl: string) {
@@ -317,7 +329,8 @@ function generateBeatTimestamps(
   let t = 0;
 
   while (t < songDuration) {
-    beats.push(parseFloat(t.toFixed(2)));
+    const beat = parseFloat(t.toFixed(2));
+    if (beat < songDuration) beats.push(beat);
     const currentSection = sections.find((s) => t >= s.startTime && t < s.endTime);
     let interval = cutInterval;
     if (currentSection) {
@@ -391,7 +404,7 @@ async function startRender({
         shape: "rectangle",
         track: 1,
         time: beat,
-        duration: (nextBeat - beat) + 0.05,
+        duration: Math.min((nextBeat - beat) + 0.05, songDuration - beat),
         width: "100%",
         height: "100%",
         x: "50%",
@@ -426,7 +439,7 @@ async function startRender({
         type: "video",
         track: 1,
         time: beat,
-        duration: (nextBeat - beat) + 0.05,
+        duration: Math.min((nextBeat - beat) + 0.05, songDuration - beat),
         source: availableClips[i % availableClips.length].url,
         fit: "cover",
       };
@@ -434,7 +447,7 @@ async function startRender({
   }
 
   // Caption elements — Dark Lyrics gets special treatment
-  const captionElements = captions.map((word, index) => {
+  const captionElements = isNeonStyle(captionStyle) ? neonTextElements(captions, captionStyle) : captions.map((word, index) => {
     const base = {
       name: `word-${index}`,
       type: "text",
@@ -560,8 +573,10 @@ async function startRender({
     body: JSON.stringify({
       source: {
         output_format: "mp4",
+        duration: songDuration,
         width,
         height,
+        ...(isNeonStyle(captionStyle) ? { fonts: [{ family: neonDesign(captionStyle).family, weight: neonDesign(captionStyle).weight, style: "normal", source: neonDesign(captionStyle).fontUrl }] } : {}),
         elements: [
           ...backgroundElements,
           {
@@ -569,6 +584,7 @@ async function startRender({
             type: "audio",
             track: 3,
             time: 0,
+            duration: songDuration,
             source: fileUrl,
           },
           ...captionElements,

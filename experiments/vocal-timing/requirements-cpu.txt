@@ -1,0 +1,9 @@
+# Install CPU torch/torchaudio first; see README. WhisperX is installed separately
+# without optional ASR/diarization/GPU dependencies; this pilot only uses alignment.
+demucs==4.0.1
+faster-whisper==1.2.1
+transformers==4.57.6
+pandas==2.3.3
+nltk==3.9.2
+librosa==0.11.0
+soundfile==0.13.1

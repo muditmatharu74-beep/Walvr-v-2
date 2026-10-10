@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { MAX_UPLOAD_BYTES, AUDIO_EXTENSIONS } from "@/lib/rendering/upload";
+import { confirmSubmission } from "@/lib/rendering/submission-response";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+
+import { NeonCaptionPreview } from "@/components/NeonCaptionPreview";
+import { creditCost, isNeonStyle } from "@/lib/rendering/neon-captions";
 
 const CAPTION_STYLES = [
   { id: "bold-overlay", label: "Bold", desc: "Big white centered text", preview: { text: "WORDS", glow: false, bottom: false, yellow: false } },
@@ -12,6 +16,11 @@ const CAPTION_STYLES = [
   { id: "minimal", label: "Minimal", desc: "Small clean text at bottom", preview: { text: "words", glow: false, bottom: true, yellow: false } },
   { id: "karaoke", label: "Karaoke", desc: "Yellow text with white stroke", preview: { text: "WORDS", glow: false, bottom: false, yellow: true } },
 ];
+
+CAPTION_STYLES.push(
+  { id: "clean-neon", label: "Clean Neon", desc: "Smooth white phrases with cyan word sync", preview: { text: "Late night", glow: true, bottom: false, yellow: false } },
+  { id: "pixel-neon", label: "Pixel Neon", desc: "Retro game lettering with a crisp blue glow", preview: { text: "LATE NIGHT", glow: true, bottom: false, yellow: false } },
+);
 
 const PLAN_ORDER = ["free", "starter", "pro", "business"];
 
@@ -26,8 +35,17 @@ export default function UploadPage() {
   const [selectedCaption, setSelectedCaption] = useState("bold-overlay");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const submittingRef = useRef(false);
   const [userPlan, setUserPlan] = useState("free");
   const [userCredits, setUserCredits] = useState(0);
+
+  useEffect(() => {
+    if (error) {
+      errorRef.current?.focus({ preventScroll: true });
+      errorRef.current?.scrollIntoView({ block: "center" });
+    }
+  }, [error]);
 
   useEffect(() => {
     async function load() {
@@ -67,7 +85,8 @@ export default function UploadPage() {
   }
 
   async function handleSubmit() {
-    if (!file || !selectedTemplate) return;
+    if (!file || !selectedTemplate || submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     setError("");
 
@@ -113,22 +132,12 @@ export default function UploadPage() {
         }),
       });
 
-      if (res.status === 403) {
-        const data = await res.json();
-        if (data.error === "Not enough credits. Top up to continue.") {
-          throw new Error(`Not enough credits. You need ${data.required} credits but only have ${data.credits}. Go to Settings to top up.`);
-        }
-        throw new Error("You've reached your limit. Upgrade your plan to continue.");
-      }
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "Video processing failed. Please try again.");
-      }
+      await confirmSubmission(res);
       router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
+      submittingRef.current = false;
     }
   }
 
@@ -194,7 +203,7 @@ export default function UploadPage() {
           ))}
         </div>
 
-        {error && <p role="alert" style={{ color: "#f5b2bc", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</p>}
+        {error && <p ref={errorRef} tabIndex={-1} role="alert" style={{ color: "#f5b2bc", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</p>}
 
         {/* Step 1 — Upload */}
         {step === "upload" && (
@@ -320,6 +329,7 @@ export default function UploadPage() {
               {CAPTION_STYLES.map((style) => (
                 <button
                   key={style.id}
+                  aria-pressed={selectedCaption === style.id}
                   onClick={() => setSelectedCaption(style.id)}
                   style={{
                     padding: "0",
@@ -334,7 +344,7 @@ export default function UploadPage() {
                   onMouseEnter={(e) => { if (selectedCaption !== style.id) (e.currentTarget as HTMLElement).style.background = "rgba(139,0,20,0.1)"; }}
                   onMouseLeave={(e) => { if (selectedCaption !== style.id) (e.currentTarget as HTMLElement).style.background = "rgba(13,3,5,0.5)"; }}
                 >
-                  <div style={{ width: "100%", height: "90px", background: "#000", display: "flex", alignItems: style.preview.bottom ? "flex-end" : "center", justifyContent: "center", padding: style.preview.bottom ? "0 0 10px 0" : "0" }}>
+                  {isNeonStyle(style.id) ? <NeonCaptionPreview style={style.id} /> : <div style={{ width: "100%", height: "90px", background: "#000", display: "flex", alignItems: style.preview.bottom ? "flex-end" : "center", justifyContent: "center", padding: style.preview.bottom ? "0 0 10px 0" : "0" }}>
                     <span style={{
                       fontSize: style.preview.bottom ? "13px" : "20px",
                       fontWeight: style.preview.bottom ? "400" : "800",
@@ -344,7 +354,7 @@ export default function UploadPage() {
                       padding: style.preview.highlight ? "3px 8px" : "0",
                       WebkitTextStroke: style.preview.yellow ? "0.5px white" : "none",
                     }}>{style.preview.text}</span>
-                  </div>
+                  </div>}
                   <div style={{ padding: "0.9rem 1.1rem" }}>
                     <p style={{ fontSize: "0.85rem", fontWeight: "600", color: selectedCaption === style.id ? "#f5f0eb" : "rgba(245,240,235,0.7)", marginBottom: "0.2rem" }}>{style.label}</p>
                     <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)" }}>{style.desc}</p>
@@ -361,9 +371,7 @@ export default function UploadPage() {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem", background: "rgba(139,0,20,0.1)", border: "1px solid rgba(200,16,46,0.2)" }}>
                   <span style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(245,240,235,0.4)" }}>Credit Cost</span>
                   <span style={{ fontSize: "1rem", fontWeight: "700", color: "#c8102e" }}>
-                    {selectedTemplate?.background_type === "color-block" || selectedTemplate?.background_type === "dark-solid"
-                      ? "100 credits"
-                      : "200 credits"}
+                    {creditCost(userPlan, selectedTemplate?.background_type, selectedCaption)} credits
                   </span>
                 </div>
                 <div style={{ display: "flex", gap: "1rem" }}>
