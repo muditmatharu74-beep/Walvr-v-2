@@ -38,3 +38,7 @@ next-env.d.ts
 
 # Supabase CLI local cache
 supabase/.temp/
+
+# Python audio pilot intermediates
+__pycache__/
+*.pyc
