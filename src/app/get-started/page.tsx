@@ -84,21 +84,21 @@ const PLANS = [
     name: "Starter",
     monthlyPrice: 9,
     annualPrice: 90,
-    features: ["10 videos/month", "No watermark", "1080p export", "3 templates"],
+    features: ["1,500 credits/month", "15 basic or 7 standard/neon videos", "No watermark", "1080p export", "3 templates"],
   },
   {
     id: "pro",
     name: "Pro",
     monthlyPrice: 19,
     annualPrice: 190,
-    features: ["Unlimited videos", "No watermark", "1080p export", "All templates", "Priority support"],
+    features: ["3,000 credits/month", "30 basic or 15 standard/neon videos", "No watermark", "1080p export", "All templates", "Priority support"],
   },
   {
     id: "business",
     name: "Business",
     monthlyPrice: 49,
     annualPrice: 490,
-    features: ["Unlimited videos", "No watermark", "4K export", "All templates", "New templates monthly"],
+    features: ["8,000 credits/month", "22 videos at 350 credits each", "No watermark", "4K export", "All templates", "New templates monthly"],
   },
 ];
 

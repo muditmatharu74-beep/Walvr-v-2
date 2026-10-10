@@ -107,7 +107,7 @@ export default function SettingsPage() {
       monthlyPrice: 9,
       annualPrice: 90,
       priceId: process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID ?? "",
-      features: ["10 videos/month", "No watermark", "1080p export", "3 templates"],
+      features: ["1,500 credits/month", "15 basic or 7 standard/neon videos", "No watermark", "1080p export", "3 templates"],
       cta: "Get Starter",
     },
     {
@@ -116,7 +116,7 @@ export default function SettingsPage() {
       monthlyPrice: 19,
       annualPrice: 190,
       priceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID ?? "",
-      features: ["Unlimited videos", "No watermark", "1080p export", "All templates", "Priority support"],
+      features: ["3,000 credits/month", "30 basic or 15 standard/neon videos", "No watermark", "1080p export", "All templates", "Priority support"],
       cta: "Get Pro",
     },
     {
@@ -125,7 +125,7 @@ export default function SettingsPage() {
       monthlyPrice: 49,
       annualPrice: 490,
       priceId: process.env.NEXT_PUBLIC_STRIPE_BUSINESS_PRICE_ID ?? "",
-      features: ["Unlimited videos", "No watermark", "4K export", "All templates", "Priority support", "New templates monthly"],
+      features: ["8,000 credits/month", "22 videos at 350 credits each", "No watermark", "4K export", "All templates", "Priority support", "New templates monthly"],
       cta: "Get Business",
     },
   ];
@@ -335,9 +335,14 @@ export default function SettingsPage() {
               <p style={{ fontSize: "2rem", fontWeight: "700", color: "#f5f0eb" }}>{profile?.credits ?? 0} <span style={{ fontSize: "0.8rem", color: "rgba(245,240,235,0.3)", fontWeight: "400" }}>remaining</span></p>
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)", marginBottom: "0.25rem" }}>Basic video = 100 credits</p>
-              <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)", marginBottom: "0.25rem" }}>Standard video = 200 credits</p>
-              <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)" }}>Premium video = 350 credits</p>
+              {plan === "business" || plan === "studio" ? (
+                <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)" }}>All videos on your plan = 350 credits each</p>
+              ) : (
+                <>
+                  <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)", marginBottom: "0.25rem" }}>Basic video = 100 credits</p>
+                  <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)" }}>Standard/neon video = 200 credits</p>
+                </>
+              )}
             </div>
           </div>
 
