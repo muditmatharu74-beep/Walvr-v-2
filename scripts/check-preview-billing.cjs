@@ -10,7 +10,7 @@ function validate(env) {
 async function run(env, stripe, log = console.log) {
   validate(env);
   const results = [];
-  for (const [plan, amount] of Object.entries({starter: 900, pro: 1900, business: 4900})) {
+  for (const [plan, amount] of Object.entries({starter: 900, pro: 1999, business: 4999})) {
     const key = plan.toUpperCase();
     const serverId = env[`STRIPE_${key}_PRICE_ID`];
     const publicId = env[`NEXT_PUBLIC_STRIPE_${key}_PRICE_ID`];

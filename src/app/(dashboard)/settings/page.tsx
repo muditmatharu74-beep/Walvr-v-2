@@ -111,7 +111,7 @@ export default function SettingsPage() {
     {
       id: "pro",
       name: "Pro",
-      monthlyPrice: 19,
+      monthlyPrice: 19.99,
       priceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID ?? "",
       features: ["3,000 credits/month", "30 basic or 15 standard/neon videos", "No watermark", "1080p export", "All templates", "Priority support"],
       cta: "Get Pro",
@@ -119,7 +119,7 @@ export default function SettingsPage() {
     {
       id: "business",
       name: "Business",
-      monthlyPrice: 49,
+      monthlyPrice: 49.99,
       priceId: process.env.NEXT_PUBLIC_STRIPE_BUSINESS_PRICE_ID ?? "",
       features: ["8,000 credits/month", "22 videos at 350 credits each", "No watermark", "4K export", "All templates", "Priority support", "New templates monthly"],
       cta: "Get Business",

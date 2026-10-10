@@ -88,13 +88,13 @@ const PLANS = [
   {
     id: "pro",
     name: "Pro",
-    monthlyPrice: 19,
+    monthlyPrice: 19.99,
     features: ["3,000 credits/month", "30 basic or 15 standard/neon videos", "No watermark", "1080p export", "All templates", "Priority support"],
   },
   {
     id: "business",
     name: "Business",
-    monthlyPrice: 49,
+    monthlyPrice: 49.99,
     features: ["8,000 credits/month", "22 videos at 350 credits each", "No watermark", "4K export", "All templates", "New templates monthly"],
   },
 ];

@@ -184,8 +184,8 @@ export default function HomePage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "1px", maxWidth: "900px", margin: "0 auto", background: "rgba(139,0,20,0.08)" }}>
           {[
             { name: "Starter", price: "$9", features: ["1,500 credits/month", "15 basic or 7 standard/neon videos", "No watermark", "1080p export", "3 templates"], featured: false, delay: "reveal-delay-2", bg: "rgba(139,0,20,0.05)" },
-            { name: "Pro", price: "$19", features: ["3,000 credits/month", "30 basic or 15 standard/neon videos", "No watermark", "1080p export", "All templates", "Priority support"], featured: true, delay: "reveal-delay-3", bg: "rgba(139,0,20,0.15)" },
-            { name: "Business", price: "$49", features: ["8,000 credits/month", "22 videos at 350 credits each", "No watermark", "4K export", "All templates", "New templates monthly"], featured: false, delay: "reveal-delay-4", bg: "rgba(80,0,40,0.08)" },
+            { name: "Pro", price: "$19.99", features: ["3,000 credits/month", "30 basic or 15 standard/neon videos", "No watermark", "1080p export", "All templates", "Priority support"], featured: true, delay: "reveal-delay-3", bg: "rgba(139,0,20,0.15)" },
+            { name: "Business", price: "$49.99", features: ["8,000 credits/month", "22 videos at 350 credits each", "No watermark", "4K export", "All templates", "New templates monthly"], featured: false, delay: "reveal-delay-4", bg: "rgba(80,0,40,0.08)" },
           ].map((plan, i) => (
             <div key={i} className={`reveal ${plan.delay}`} style={{ padding: "3rem 2rem", background: plan.bg, position: "relative", outline: plan.featured ? "1px solid rgba(200,16,46,0.4)" : "none", transition: "opacity 0.8s ease, transform 0.8s ease" }}>
               {plan.featured && (
