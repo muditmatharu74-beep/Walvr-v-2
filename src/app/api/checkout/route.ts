@@ -1,4 +1,5 @@
 import { subscriptionPlan } from "@/lib/billing/prices";
+import { checkoutOrigin } from "@/lib/billing/checkout-origin";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
 
     if (profileError || !profile) throw profileError ?? new Error("Profile not found");
 
+    const origin = checkoutOrigin();
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       subscription_data: { metadata: { user_id: user.id } },
@@ -44,8 +46,8 @@ export async function POST(request: Request) {
       metadata: {
         user_id: user.id,
       },
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?upgraded=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings`,
+      success_url: `${origin}/dashboard?upgraded=true`,
+      cancel_url: `${origin}/settings`,
     });
 
     return NextResponse.json({ url: session.url });
