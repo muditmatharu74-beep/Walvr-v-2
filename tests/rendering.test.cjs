@@ -76,6 +76,7 @@ function setup({ user = { id: userId }, video = null, progress = {}, progressErr
     '@/lib/rendering/upload': upload,
     '@/lib/rendering/neon-captions': neonCaptions,
     '@/lib/rendering/transcription-quality': transcriptionQuality,
+    '@/lib/rendering/vocal-jobs': {vocalJobsEnabled: () => false},
     '@anthropic-ai/sdk': class { constructor() {} },
     fetch: async (url) => { providerCalls.push(url); return Response.json(fetchResult); },
   };
@@ -160,7 +161,7 @@ test('submission rejects another owner and already-submitted videos before paid 
   assert.equal(running.providerCalls.length, 0);
 });
 
-function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false, submissionFails=false, rendererConfigured=true, captionStyle='bold-overlay', backgroundType='dark-solid', plan='free', duration=10, words=[{word:'hello',start:0,end:1}], clips=[], analysis={mood:'dark',energy:'low'} }={}) {
+function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false, submissionFails=false, rendererConfigured=true, vocalTiming=false, captionStyle='bold-overlay', backgroundType='dark-solid', plan='free', duration=10, words=[{word:'hello',start:0,end:1}], clips=[], analysis={mood:'dark',energy:'low'} }={}) {
   const state=setup(); const rpc=[]; const renders=[];
   const db={
     async rpc(name,args){rpc.push({name,args});return {data:name==='reserve_video_credits'?{status:reservation,credits:400}:{status:'error'},error:null}},
@@ -171,6 +172,9 @@ function submission({ reservation='reserved', transcriptionFails=false, tracking
     },
   };
   state.mocks['@supabase/supabase-js']={createClient:()=>db};
+  state.mocks['@/lib/rendering/vocal-jobs']={vocalJobsEnabled:()=>vocalTiming,assertVocalWorkerConfigured(){},enqueueVocalJob:async(_db,input)=>{
+    rpc.push({name:'enqueue_vocal_job',args:input}); return {status:reservation,credits:400};
+  }};
   state.mocks['@anthropic-ai/sdk']=class{constructor(){this.messages={create:async()=>({content:[{type:'text',text:JSON.stringify(analysis)}]})}}};
   state.mocks['@/lib/rendering/remotion']={assertDarkLyricsConfigured:()=>{if(!rendererConfigured)throw Error('Missing render configuration')},startDarkLyricsRender:async(props)=>{renders.push(props);if(submissionFails)throw Error('submission response lost');return {id:'job',bucketName:'bucket',functionName:'function',region:'us-east-1'}}};
   state.mocks.fetch=async(url,options)=>{
@@ -182,6 +186,16 @@ function submission({ reservation='reserved', transcriptionFails=false, tracking
   const body={videoId,templateId:'13c51a59-7ad1-4669-a519-aa694f1b047f',title:'Song',artist:'Artist',captionStyle,fileUrl:`${origin}/storage/v1/object/public/uploads/${userId}/song.mp3`};
   return {rpc,renders,run:()=>load('src/app/api/process/route.ts',state.mocks).POST(request(body))};
 }
+
+test('staged Create queues vocal analysis atomically and returns before transcription or paid rendering',async()=>{
+  const state=submission({vocalTiming:true});
+  const response=await state.run();
+  assert.equal(response.status,202);
+  assert.deepEqual(await response.json(),{success:true,status:'queued',videoId,creditsRemaining:400});
+  assert.equal(state.renders.length,0);
+  assert.deepEqual(state.rpc.map(x=>x.name),['enqueue_vocal_job']);
+  assert.equal(state.rpc[0].args.userId,userId);
+});
 
 for(const captionStyle of ['clean-neon','pixel-neon']) {
   test(`${captionStyle}: clip and color payloads retain exact audio duration, including empty lyrics`,async()=>{

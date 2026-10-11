@@ -1,4 +1,4 @@
-// Only leave the upload page after the API confirms an accepted render.
+// Only leave after an accepted render or a durable queued job, never a generic 2xx.
 export async function confirmSubmission(response: Response): Promise<void> {
   const data = await response.json().catch(() => null);
   if (!response.ok) {
@@ -13,7 +13,9 @@ export async function confirmSubmission(response: Response): Promise<void> {
     }
     throw new Error("Could not confirm video creation. Check your dashboard before trying again.");
   }
-  if (data?.success !== true || typeof data.renderId !== "string" || !data.renderId.trim()) {
+  const queued = response.status === 202 && data?.success === true && data.status === "queued" &&
+    typeof data.videoId === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(data.videoId);
+  if (!queued && (data?.success !== true || typeof data.renderId !== "string" || !data.renderId.trim())) {
     throw new Error("Could not confirm video creation. Check your dashboard before trying again.");
   }
 }

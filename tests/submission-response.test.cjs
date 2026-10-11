@@ -17,6 +17,15 @@ test('upload accepts only a confirmed render with a tracking ID', async () => {
   await assert.rejects(confirmSubmission(new Response('<html>gateway</html>')), /Check your dashboard/);
 });
 
+test('upload accepts a durable queued receipt only with 202 and a valid video ID', async () => {
+  const body={success:true,status:'queued',videoId:'22222222-2222-4222-8222-222222222222'};
+  await confirmSubmission(Response.json(body,{status:202}));
+  for(const response of [Response.json(body),Response.json({...body,videoId:''},{status:202}),
+    Response.json({...body,status:'processing'},{status:202})]){
+    await assert.rejects(confirmSubmission(response),/Check your dashboard/);
+  }
+});
+
 test('upload preserves permission and renderer errors instead of blaming the plan', async () => {
   for (const [status, error] of [[403, 'Template not available on your plan'], [403, 'Video or plan changed. Refresh and try again.'],
     [503, 'This template is temporarily unavailable. Your credits have not been charged.']]) {

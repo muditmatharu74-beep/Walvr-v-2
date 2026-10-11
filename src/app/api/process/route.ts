@@ -7,6 +7,7 @@ import { assertDarkLyricsConfigured, startDarkLyricsRender } from "@/lib/renderi
 import { songDuration as getSongDuration } from "@/lib/rendering/timing";
 import { ownedUploadUrl, MAX_UPLOAD_BYTES } from "@/lib/rendering/upload";
 import { assertUsableTranscription, TranscriptionQualityError } from "@/lib/rendering/transcription-quality";
+import { vocalJobsEnabled, assertVocalWorkerConfigured, enqueueVocalJob } from "@/lib/rendering/vocal-jobs";
 
 import { CAPTION_STYLE_IDS, creditCost as getCreditCost, isNeonStyle, neonDesign, neonTextElements } from "@/lib/rendering/neon-captions";
 
@@ -93,6 +94,19 @@ export async function POST(request: Request) {
 
     if (currentCredits < creditCost) {
       return NextResponse.json({ error: "Not enough credits. Top up to continue.", credits: currentCredits, required: creditCost }, { status: 403 });
+    }
+
+    if (template.background_type === "dark-solid" && vocalJobsEnabled()) {
+      try { assertVocalWorkerConfigured(); }
+      catch { return NextResponse.json({error: "Lyric timing is temporarily unavailable. Your credits have not been charged."}, {status: 503}); }
+      // Reservation and queue insertion commit together. No long ML work here.
+      let queued;
+      try { queued = await enqueueVocalJob(supabase, {userId, videoId, fileUrl, captionStyle, cost: creditCost, plan}); }
+      catch (error) { return NextResponse.json({error: error instanceof Error ? error.message : "Could not confirm lyric processing. Check your dashboard."}, {status: 503}); }
+      if (queued.status !== "reserved") return NextResponse.json({
+        error: queued.status === "insufficient" ? "Not enough credits" : "Video or plan changed. Refresh and try again.",
+      }, {status: queued.status === "insufficient" ? 403 : 409});
+      return NextResponse.json({success: true, status: "queued", videoId, creditsRemaining: queued.credits}, {status: 202});
     }
 
     const { data: reservation, error: claimError } = await supabase.rpc("reserve_video_credits", {

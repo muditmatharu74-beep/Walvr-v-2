@@ -124,8 +124,9 @@ duration, not the vocals stem. The renderer adapter is not called by Create
 yet; output has `providerSubmissionAllowed: false`. Automated screening is
 not human verification, including when `reviewRequired` is false.
 
-Create integration still requires a durable ML worker: enqueue the verified
-owned upload, persist its job/result privately, align words, and resume the
-existing render exactly once. The browser must never supply a trusted analysis
-or bypass a review flag. Do not apply DB migrations or activate that worker
-until the staged end-to-end flow and billing recovery have been reviewed.
+The staged Create integration now lives in `src/lib/rendering/vocal-jobs.ts`,
+the internal worker API and `worker.py`. It is disabled by default and requires
+a reviewed preview database plus a supervised worker host before activation.
+See [the rollout guide](../../docs/vocal-worker-rollout.md) for its queue, lease,
+result validation and submission uncertainty handling. The browser must never
+supply a trusted analysis or bypass a review flag.
