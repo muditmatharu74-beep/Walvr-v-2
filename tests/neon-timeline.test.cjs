@@ -21,7 +21,9 @@ const {DarkLyrics} = load('src/remotion/DarkLyrics.tsx',name=>{
   if(name==='remotion') return {
     useCurrentFrame:()=>frame,useVideoConfig:()=>({fps:30}),delayRender:()=>1,
     continueRender(){},cancelRender(){},AbsoluteFill:({children,...props})=>React.createElement('div',props,children),
-    Audio:()=>null,
+    Audio:({src})=>React.createElement('audio',{src}),
+    Loop:({children,durationInFrames})=>React.createElement('div',{'data-loop-frames':durationInFrames},children),
+    OffthreadVideo:props=>React.createElement('video',props),
   };
   if(name.includes('@fontsource/')) return {};
   if(name.includes('neon-captions')) return helpers;
@@ -67,4 +69,17 @@ test('existing caption choices retain their original Dark Lyrics word treatment'
     assert.ok(html.includes('font-size:160px'));
     assert.ok(!html.includes('data-active='));
   }
+});
+
+test('footage loops muted behind captions while the original song plays once',()=>{
+ frame=30;
+ const html=renderToStaticMarkup(React.createElement(DarkLyrics,{captionStyle:'clean-neon',
+  captions:[{word:'hello',start:0,end:2}],songDuration:190.1,beats:[],audioUrl:'https://audio.test/original.mp3',
+  backgroundVideo:{src:'https://assets.test/neon.mp4',duration:7.5}}));
+ assert.ok(html.includes('data-loop-frames="225"'));
+ assert.ok(html.includes('muted=""'));
+ assert.ok(html.includes('object-fit:cover'));
+ assert.equal((html.match(/<audio/g)||[]).length,1);
+ assert.ok(html.indexOf('<video')<html.indexOf('data-active='));
+ assert.ok(html.includes('https://audio.test/original.mp3'));
 });

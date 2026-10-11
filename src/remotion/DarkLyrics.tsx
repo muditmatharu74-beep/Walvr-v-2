@@ -1,4 +1,5 @@
-import { useCurrentFrame, useVideoConfig, Audio, AbsoluteFill } from "remotion";
+import { useCurrentFrame, useVideoConfig, Audio, AbsoluteFill, Loop, OffthreadVideo } from "remotion";
+import type { NeonBackground } from "../lib/rendering/neon-background";
 
 import { isNeonStyle } from "../lib/rendering/neon-captions";
 import { NeonCaptionOverlay } from "../components/NeonCaptionOverlay";
@@ -19,9 +20,10 @@ export type DarkLyricsProps = {
   beats: number[];
   audioUrl?: string;
   captionStyle?: string;
+  backgroundVideo?: NeonBackground;
 };
 
-export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUrl, captionStyle }) => {
+export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUrl, captionStyle, backgroundVideo }) => {
   const neon = isNeonStyle(captionStyle);
   const [fontHandle] = useState(() => neon ? delayRender("Load neon caption font") : null);
   useEffect(() => {
@@ -53,6 +55,14 @@ export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUr
 
   return (
     <AbsoluteFill style={{ backgroundColor: `rgb(${bgBrightness}, ${bgBrightness}, ${bgBrightness})` }}>
+      {backgroundVideo && (
+        <>
+          <Loop durationInFrames={Math.max(1, Math.ceil(backgroundVideo.duration * fps))}>
+            <OffthreadVideo src={backgroundVideo.src} muted style={{width: "100%", height: "100%", objectFit: "cover"}} />
+          </Loop>
+          <AbsoluteFill style={{backgroundColor: "rgba(0,0,0,0.25)"}} />
+        </>
+      )}
       
       {/* Wine red vignette */}
       <AbsoluteFill style={{

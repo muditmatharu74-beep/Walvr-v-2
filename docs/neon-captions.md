@@ -67,3 +67,29 @@ Dark Lyrics validates local renderer settings before credit reservation or trans
 
 The old `walvr-render-fix` Lambda site does not contain the neon styles. `scripts/publish-neon-preview.cjs` bundles the current composition and its fonts into a separate, commit-specific site in the existing Remotion bucket. Run it only as a reviewed Vercel preview build command (`node scripts/publish-neon-preview.cjs && npm run build`) after setting a branch-specific `REMOTION_SERVE_URL` to the expected commit-specific path. It rejects production, other branches, mismatched destinations and existing mismatched sites. Credentials remain in the deployment environment. Normal build commands do not publish AWS resources. The production renderer URL and Lambda function are not changed.
 
+
+
+## Looped footage background
+
+`DarkLyrics` now accepts a server-supplied `backgroundVideo` containing an HTTPS
+asset URL and its measured duration in seconds. The clip fills the portrait
+frame with `objectFit: cover`, loops for the entire composition, and is muted.
+A light dark overlay keeps lyrics readable. The original song audio, caption
+times and full-song duration remain unchanged.
+
+For the `feature/neon-captions` preview, configure both
+`WALVR_NEON_BACKGROUND_URL` and `WALVR_NEON_BACKGROUND_DURATION` after inspecting
+the intended asset with ffprobe. `startDarkLyricsRender` applies this background
+for both existing Create and the staged vocal-worker path. Incomplete or invalid
+configuration is rejected before charging. Production ignores this preview setting.
+
+The existing high-energy clip used by the Neon Blue template was inspected: it
+shows pink/purple neon-lit city towers, lasts 14.121667 seconds, and is already
+hosted in the app clip collection. Its original audio must remain muted. The
+background configuration and new composition must both be deployed to the caption
+preview before the next song test can use it.
+
+CI encodes a generated one-second test-pattern video behind a four-second song.
+It checks repeated source frames after several loops, full output duration,
+retained song audio and absence of the fixture video's own audio. This tests
+playback behavior; it is not a preview of the user's eventual neon clip.

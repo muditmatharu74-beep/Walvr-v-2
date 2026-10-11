@@ -1,6 +1,7 @@
 import { getRenderProgress, renderMediaOnLambda } from "@remotion/lambda/client";
 import type { DarkLyricsProps } from "../../remotion/DarkLyrics";
 import { durationInFrames } from "./timing";
+import { previewNeonBackground } from "./neon-background";
 
 function config() {
   const region = process.env.REMOTION_AWS_REGION ?? "us-east-1";
@@ -11,7 +12,8 @@ function config() {
   if (!Number.isInteger(maxConcurrency) || maxConcurrency < 2 || maxConcurrency > 200) {
     throw new Error("REMOTION_MAX_CONCURRENCY must be an integer from 2 to 200");
   }
-  return { region: region as Parameters<typeof renderMediaOnLambda>[0]["region"], functionName, serveUrl, maxConcurrency };
+  return { region: region as Parameters<typeof renderMediaOnLambda>[0]["region"], functionName, serveUrl, maxConcurrency,
+    backgroundVideo: previewNeonBackground(process.env) };
 }
 
 // Validate before reserving credits or doing transcription. A missing local
@@ -21,10 +23,10 @@ export function assertDarkLyricsConfigured() {
 }
 
 export async function startDarkLyricsRender(inputProps: DarkLyricsProps) {
-  const { region, functionName, serveUrl, maxConcurrency } = config();
+  const { region, functionName, serveUrl, maxConcurrency, backgroundVideo } = config();
   const result = await renderMediaOnLambda({
     region, functionName, serveUrl,
-    composition: "DarkLyrics", inputProps,
+    composition: "DarkLyrics", inputProps: backgroundVideo ? {...inputProps, backgroundVideo} : inputProps,
     codec: "h264", imageFormat: "jpeg", maxRetries: 1,
     // Remotion caps a render at 200 functions. Fixed 20-frame batches exceed
     // that limit for songs longer than 133 seconds at 30 fps.

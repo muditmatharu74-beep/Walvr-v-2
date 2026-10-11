@@ -15,6 +15,9 @@ const edgeCaptions = require('./neon-edge-fixtures.cjs');
   fs.mkdirSync(output, { recursive: true });
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'walvr-neon-audio-'));
   execFileSync('ffmpeg', ['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=220:sample_rate=44100','-t','4','-filter:a','volume=0.1',path.join(fixture,'tone.wav')]);
+  // Test pattern has its own 880 Hz sound; it is not the user's neon asset.
+  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','testsrc2=size=360x640:rate=30',
+    '-f','lavfi','-i','sine=frequency=880:sample_rate=44100','-t','1','-c:v','libx264','-threads','2','-pix_fmt','yuv420p','-c:a','aac',path.join(fixture,'background.mp4')]);
   const browser = await ensureBrowser();
   const serveUrl = await bundle({ entryPoint: path.join(__dirname,'../src/remotion/index.ts'), publicDir: fixture });
   const report = { kind: 'composition smoke test, not a live provider or footage test', duration: 4, variants: [] };
@@ -59,6 +62,27 @@ const edgeCaptions = require('./neon-edge-fixtures.cjs');
     console.log('PASS '+stem+': H.264/AAC MP4, 1080x1920, 4s, visible cyan highlight and changing word sync');
   }
   assert.notEqual(report.variants[0].frameHash,report.variants[2].frameHash,'The two styles rendered identically');
+  const backgroundProps={captionStyle:'clean-neon',songDuration:4,beats:[],audioUrl:'/public/tone.wav',
+    captions:[{word:'Loop',start:0,end:4}],backgroundVideo:{src:'/public/background.mp4',duration:1}};
+  const backgroundComposition=await selectComposition({serveUrl,id:'DarkLyrics',inputProps:backgroundProps,browserExecutable:browser.path});
+  const backgroundFile=path.join(output,'background-loop-smoke.mp4');
+  await renderMedia({serveUrl,composition:backgroundComposition,inputProps:backgroundProps,browserExecutable:browser.path,
+    outputLocation:backgroundFile,codec:'h264',audioCodec:'aac',concurrency:2});
+  const backgroundProbe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_format','-of','json',backgroundFile],{encoding:'utf8'}));
+  assert.ok(Math.abs(Number(backgroundProbe.format.duration)-4)<0.1,'Short footage must not shorten the song');
+  const region=time=>execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-ss',String(time),'-i',backgroundFile,
+    '-frames:v','1','-vf','crop=1080:600:0:0','-f','rawvideo','-pix_fmt','rgb24','pipe:1'],{maxBuffer:4*1024*1024});
+  const first=region(0.2),later=region(3.2);
+  let diff=0,brightness=0;
+  for(let i=0;i<first.length;i++){diff+=Math.abs(first[i]-later[i]);brightness+=later[i];}
+  assert.ok(diff/first.length<3,'Background did not loop to the same source frame');
+  assert.ok(brightness/later.length>30,'Footage vanished after its first iteration');
+  const pcm=execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-i',backgroundFile,'-vn','-ac','1','-ar','44100','-f','f32le','pipe:1'],{maxBuffer:2*1024*1024});
+  const energy=hz=>{let re=0,im=0;for(let i=0;i<pcm.length/4;i++){const value=pcm.readFloatLE(i*4);re+=value*Math.cos(2*Math.PI*hz*i/44100);im+=value*Math.sin(2*Math.PI*hz*i/44100)}return Math.hypot(re,im)};
+  assert.ok(energy(220)>100,'Original song audio is missing');
+  assert.ok(energy(880)<energy(220)*0.05,'Background video audio leaked into the song');
+  report.background={duration:4,sourceDuration:1,loopFrameDifference:diff/first.length,muted:true};
+  console.log('PASS background: looping video, full song duration, original audio retained, footage audio muted');
   fs.writeFileSync(path.join(output,'verification.json'),JSON.stringify(report,null,2));
   fs.rmSync(fixture,{recursive:true,force:true});
   console.log('Exports: '+output);
