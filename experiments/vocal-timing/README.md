@@ -29,8 +29,11 @@ python -m venv /tmp/walvr-audio
 
 WhisperX uses lazy imports. Only its alignment/audio modules are used; its separate
 ASR, diarization, torchvision and CUDA dependencies are intentionally omitted.
-The recognition step uses faster-whisper directly with VAD. Models are downloaded
+The recognition step uses faster-whisper directly. Models are downloaded
 on first use. No external service account or API key is required for this pilot.
+The pipeline sets `ORT_DISABLE_TELEMETRY=1` and `HF_HUB_DISABLE_TELEMETRY=1`
+before native/model imports. Model downloads are still required on a cold run;
+runtime telemetry is not part of the audio-analysis workflow.
 
 ```sh
 OMP_NUM_THREADS=2 /tmp/walvr-audio/bin/python experiments/vocal-timing/pipeline.py \
@@ -43,6 +46,20 @@ language detection. A supplied language is a constraint, not evidence that the
 recording is in that language. The small model is a feasibility baseline; larger
 models and separated-vs-original comparisons must be evaluated on music before
 selecting a production configuration.
+
+Speech VAD is now disabled by default for sung vocals. `--vad-filter` enables
+it for an explicit comparison run; it must not silently remove sung passages.
+This is a candidate configuration, not a verified accuracy improvement. Run
+both configurations against the same excerpt and manually compare missing,
+wrong, early, and late words before selecting it for the worker.
+
+Pilot comparison (2026-10-11): the same 45-second music excerpt produced
+104 aligned words without speech VAD and 103 with it after vocal separation.
+Neither run rejected word timestamps; these counts do not establish lyric
+accuracy. A separate 25-second excerpt produced no lyrics even with VAD off
+and was rejected by the renderer handoff. Removing speech VAD therefore does
+not resolve every failed upload. Both require listening and reference timing
+checks before any production claim.
 
 Outputs include private lyric text and must stay outside this public repository.
 Normal stage logs contain counts only. Missing word timings are rejected rather
@@ -85,3 +102,30 @@ This simple ffmpeg/libass clip checks timing, not the production Remotion layout
 or final background design. It does not consume render credits. Review the
 first word, fast passages, sustained notes and caption-free gaps against the
 singer. A human review is still required even if all words receive timestamps.
+
+## Checked renderer handoff
+
+`src/lib/rendering/vocal-timing.ts` accepts analysis only when the original
+upload hash and independently measured duration match. It checks every word
+and beat against the original clock, refuses empty/invalid lyric timings,
+and prevents a partial analysis from becoming a full-song render. Timestamp
+offsets are already absolute and must never be applied a second time.
+
+Rehearse the handoff without a provider submission or credit charge:
+
+```sh
+node scripts/prepare-vocal-render.cjs /private/song.mp3 \
+  /private/song-analysis.json /private/render-input.json clean-neon
+```
+
+Use `--review` as a fifth argument for a partial or flagged result. This emits
+private renderer props bound to the **original** audio file and original
+duration, not the vocals stem. The renderer adapter is not called by Create
+yet; output has `providerSubmissionAllowed: false`. Automated screening is
+not human verification, including when `reviewRequired` is false.
+
+Create integration still requires a durable ML worker: enqueue the verified
+owned upload, persist its job/result privately, align words, and resume the
+existing render exactly once. The browser must never supply a trusted analysis
+or bypass a review flag. Do not apply DB migrations or activate that worker
+until the staged end-to-end flow and billing recovery have been reviewed.

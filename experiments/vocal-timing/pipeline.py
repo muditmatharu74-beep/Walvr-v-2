@@ -8,11 +8,26 @@ import gc
 import hashlib
 import json
 import math
+import os
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
+
+# Disable runtime/model telemetry before any native or ML package initializes.
+# ONNX's API opt-out alone can occur after its initialization telemetry event.
+os.environ['ORT_DISABLE_TELEMETRY'] = '1'
+os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
+
+
+def private_output_path(audio, output, repo):
+    destination = output.resolve()
+    if destination == audio.resolve():
+        raise ValueError('Analysis must not overwrite the original audio')
+    if destination.is_relative_to(repo.resolve()):
+        raise ValueError('Save private transcripts outside the repository')
+    return destination
 
 
 def checked_words(words, offset, duration):
@@ -21,6 +36,7 @@ def checked_words(words, offset, duration):
     for item in words:
         start, end, text = item.get('start'), item.get('end'), item.get('word')
         if (not isinstance(text, str) or not text.strip() or
+            isinstance(start, bool) or isinstance(end, bool) or
             not isinstance(start, (int, float)) or not isinstance(end, (int, float)) or
             not math.isfinite(start) or not math.isfinite(end) or
             start < 0 or end <= start or end + offset > duration + 0.05 or start < previous):
@@ -42,6 +58,8 @@ def main():
     parser.add_argument('--seconds', type=float)
     parser.add_argument('--language', default=None, help='Optional known vocal language, e.g. en; otherwise detect')
     parser.add_argument('--asr-model', default='small')
+    parser.add_argument('--vad-filter', action='store_true',
+                        help='Enable speech VAD for a comparison run; default off for sung vocals')
     parser.add_argument('--device', choices=['cpu', 'cuda'], default='cpu')
     parser.add_argument('--baseline', action='store_true', help='Also recognize the original excerpt for comparison')
     args = parser.parse_args()
@@ -51,8 +69,10 @@ def main():
         parser.error('seconds must be finite and positive')
     # Private results must not go into the public source repository.
     repo = Path(__file__).resolve().parents[2]
-    if args.output.resolve().is_relative_to(repo):
-        parser.error('Save private transcripts outside the repository')
+    try:
+        private_output_path(args.audio, args.output, repo)
+    except ValueError as error:
+        parser.error(str(error))
     source_hash = hashlib.sha256(args.audio.read_bytes()).hexdigest()
     probe = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries',
         'format=duration', '-of', 'json', str(args.audio)]))
@@ -86,7 +106,7 @@ def main():
             compute_type='int8' if args.device == 'cpu' else 'float16', cpu_threads=2)
         def recognize(path):
             segments, info = model.transcribe(whisperx.load_audio(str(path)), language=args.language,
-                beam_size=5, vad_filter=True, word_timestamps=True,
+                beam_size=5, vad_filter=args.vad_filter, word_timestamps=True,
                 condition_on_previous_text=False)
             result = [{'start': s.start, 'end': s.end, 'text': s.text,
                        'words': [{'word': w.word, 'start': w.start, 'end': w.end} for w in s.words or []]}
@@ -117,17 +137,25 @@ def main():
             'excerptDuration': len(source_samples) / sr, 'language': language,
             'text': ' '.join(s['text'].strip() for s in segments), 'words': words, 'beats': beats,
             'reviewRequired': not words or rejected > 0 or coverage < 0.9,
-            'diagnostics': {'elapsedSeconds': round(time.monotonic() - started, 2),
+            'diagnostics': {'asrModel': args.asr_model, 'vadFilter': args.vad_filter,
+                'separationModel': 'htdemucs', 'alignmentModel': 'whisperx',
+                'humanVerified': False,
+                'elapsedSeconds': round(time.monotonic() - started, 2),
                 'rejectedWords': rejected, 'alignmentCoverage': round(coverage, 3),
                 'baseline': baseline, 'separatedSegments': segments}}
         if hashlib.sha256(args.audio.read_bytes()).hexdigest() != source_hash:
             raise RuntimeError('Source file changed during analysis')
         args.output.parent.mkdir(parents=True, exist_ok=True)
         # Failures never leave a partial result that could be consumed as a successful job.
-        temporary = args.output.with_suffix('.tmp')
-        temporary.write_text(json.dumps(output, ensure_ascii=False, indent=2))
-        temporary.chmod(0o600)
-        temporary.replace(args.output)
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', dir=args.output.parent,
+                                         prefix=args.output.name + '.', delete=False) as handle:
+            temporary = Path(handle.name)
+        try:
+            with temporary.open('w', encoding='utf8') as handle:
+                json.dump(output, handle, ensure_ascii=False, indent=2)
+            temporary.replace(args.output)
+        finally:
+            temporary.unlink(missing_ok=True)
         print(json.dumps({'stage': 'done', 'words': len(words), 'beats': len(beats),
                           'reviewRequired': output['reviewRequired'],
                           'elapsedSeconds': output['diagnostics']['elapsedSeconds']}), flush=True)

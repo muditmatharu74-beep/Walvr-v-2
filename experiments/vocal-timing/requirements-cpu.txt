@@ -2,6 +2,8 @@
 # without optional ASR/diarization/GPU dependencies; this pilot only uses alignment.
 demucs==4.0.1
 faster-whisper==1.2.1
+av==16.0.1
+ctranslate2==4.8.2
 transformers==4.57.6
 pandas==2.3.3
 nltk==3.9.2

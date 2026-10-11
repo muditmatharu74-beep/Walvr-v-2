@@ -25,6 +25,8 @@ def main():
         parser.error('Invalid review interval')
     if args.output.resolve().is_relative_to(Path(__file__).resolve().parents[2]):
         parser.error('Keep private clips outside the repository')
+    if args.output.resolve() in [args.audio.resolve(), args.analysis.resolve()]:
+        parser.error('Review output must not overwrite source audio or analysis')
     data = json.loads(args.analysis.read_text())
     if data['sourceSha256'] != hashlib.sha256(args.audio.read_bytes()).hexdigest():
         parser.error('Analysis does not match source audio')
