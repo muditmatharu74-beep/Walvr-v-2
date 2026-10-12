@@ -93,3 +93,13 @@ CI encodes a generated one-second test-pattern video behind a four-second song.
 It checks repeated source frames after several loops, full output duration,
 retained song audio and absence of the fixture video's own audio. This tests
 playback behavior; it is not a preview of the user's eventual neon clip.
+# Decoder memory check
+
+The real 2160×3840 city asset exposed a decoder OOM in an 8 GiB local
+container during an 18-second export. Retrying with a single browser frame and
+a longer timeout alone still failed. Preview renders with configured footage
+now explicitly cap the OffthreadVideo frame cache at 256 MiB and use one
+decoder thread; this limits the cache, not total process memory. Caption-only
+renders retain their previous settings. The export smoke test uses the same
+decoder settings. The actual-footage comparison is an offline render with
+saved experimental timings, not a signed-in Create or an accuracy assessment.

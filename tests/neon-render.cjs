@@ -67,7 +67,8 @@ const edgeCaptions = require('./neon-edge-fixtures.cjs');
   const backgroundComposition=await selectComposition({serveUrl,id:'DarkLyrics',inputProps:backgroundProps,browserExecutable:browser.path});
   const backgroundFile=path.join(output,'background-loop-smoke.mp4');
   await renderMedia({serveUrl,composition:backgroundComposition,inputProps:backgroundProps,browserExecutable:browser.path,
-    outputLocation:backgroundFile,codec:'h264',audioCodec:'aac',concurrency:2});
+    outputLocation:backgroundFile,codec:'h264',audioCodec:'aac',concurrency:1,
+    offthreadVideoCacheSizeInBytes:256*1024*1024,offthreadVideoThreads:1});
   const backgroundProbe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_format','-of','json',backgroundFile],{encoding:'utf8'}));
   assert.ok(Math.abs(Number(backgroundProbe.format.duration)-4)<0.1,'Short footage must not shorten the song');
   const region=time=>execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-ss',String(time),'-i',backgroundFile,

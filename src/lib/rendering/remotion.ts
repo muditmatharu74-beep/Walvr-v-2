@@ -32,6 +32,8 @@ export async function startDarkLyricsRender(inputProps: DarkLyricsProps) {
     // that limit for songs longer than 133 seconds at 30 fps.
     framesPerLambda: Math.max(20, Math.ceil(durationInFrames(inputProps.songDuration) / maxConcurrency)),
     concurrencyPerLambda: 1,
+    // Bound decoded 4K footage memory instead of sizing the cache from host RAM.
+    ...(backgroundVideo ? {offthreadVideoCacheSizeInBytes: 256 * 1024 * 1024, offthreadVideoThreads: 1} : {}),
     outName: `dark-lyrics-${crypto.randomUUID()}.mp4`,
     timeoutInMilliseconds: 120000,
   });

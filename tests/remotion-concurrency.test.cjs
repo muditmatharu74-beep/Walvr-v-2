@@ -52,6 +52,8 @@ test('configured preview background preserves the original audio and song clock'
  await renderer.startDarkLyricsRender(props);
  assert.equal(calls[0].inputProps.backgroundVideo.src,'https://assets.test/neon.mp4');
  assert.equal(calls[0].inputProps.backgroundVideo.duration,7.5);
+ assert.equal(calls[0].offthreadVideoCacheSizeInBytes,256*1024*1024);
+ assert.equal(calls[0].offthreadVideoThreads,1);
  assert.equal(calls[0].inputProps.audioUrl,props.audioUrl);
  assert.equal(calls[0].inputProps.songDuration,190.1);
  assert.equal(calls[0].inputProps.captions,props.captions);
