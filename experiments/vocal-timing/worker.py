@@ -174,6 +174,14 @@ def main():
     args = parser.parse_args()
     client = Client(os.environ['WALVR_APP_URL'], os.environ['WALVR_VOCAL_WORKER_SECRET'],
                     os.environ['WALVR_STORAGE_ORIGIN'], os.environ.get('WALVR_PREVIEW_BYPASS_TOKEN'))
+    # Detect missing native libraries/cache permissions before claiming any job.
+    from preflight import check_runtime
+    try:
+        check_runtime()
+    except Exception:
+        print(json.dumps({'worker': 'vocal-timing', 'startupFailed': True,
+                          'reason': 'runtime_or_cache_unavailable'}), flush=True)
+        raise SystemExit(1)
     while True:
         try:
             handled = run_once(client)

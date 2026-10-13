@@ -20,7 +20,9 @@ RUN python -m pip install --no-cache-dir torch==2.8.0 torchaudio==2.8.0 \
     && python -m pip install --no-cache-dir --no-deps whisperx==3.8.6 \
     && python -c "import nltk; assert nltk.download('punkt_tab', download_dir='/opt/nltk_data', quiet=True)"
 COPY experiments/vocal-timing/pipeline.py experiments/vocal-timing/worker.py \
-    experiments/vocal-timing/test_pipeline.py experiments/vocal-timing/test_worker.py /app/experiments/vocal-timing/
+    experiments/vocal-timing/preflight.py \
+    experiments/vocal-timing/test_pipeline.py experiments/vocal-timing/test_worker.py \
+    experiments/vocal-timing/test_preflight.py /app/experiments/vocal-timing/
 RUN mkdir -p /cache/huggingface /cache/torch /tmp/walvr \
     && chown -R 10001:10001 /cache /tmp/walvr && chmod 700 /tmp/walvr
 USER 10001:10001

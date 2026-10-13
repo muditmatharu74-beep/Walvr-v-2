@@ -135,3 +135,32 @@ The analysis timeout now stops the pipeline's entire POSIX process group,
 including a Demucs child that ignores SIGTERM. ffprobe has a separate 30-second
 timeout. These bounds avoid orphaned model processes after an analysis failure;
 they do not guarantee completion of every ten-minute song within 1100 seconds.
+
+## Railway preview setup
+
+The prepared configuration is `/experiments/vocal-timing/railway.json`. Set that
+as the service's config path and keep the build context at the repository root;
+it selects the CPU Dockerfile and bounded restart policy. Create a background
+service named `walvr-vocal-preview-worker` from the reviewed feature branch,
+with one replica, no public domain, and serverless sleeping disabled. Provision
+an 8 GiB memory limit for the initial rehearsal, then right-size from measured
+usage. Neither a paid service nor a database branch is created by this config.
+
+Configure the app origin, isolated Storage origin, worker secret and any preview
+bypass in Railway's private variables. Check the container with
+`python preflight.py` before allowing jobs. Worker startup performs that same
+native-library and writable-cache check before its first claim, and exits with
+a generic error if it fails. It does not claim that model downloads are warmed.
+
+Railway documents permission problems when a volume is mounted into a non-root
+container. Verify that a `/cache` volume is writable by UID/GID 10001 before
+attaching it. Do not solve this by running the audio pipeline as root. Without
+a volume, the image's writable cache can be used for an initial rehearsal, but
+models must be downloaded again after each replacement deployment. Warm and
+measure those downloads before enabling the preview flag.
+
+The checked Supabase project had no development branch on 2026-10-12. Its
+connected cost-check operation was unavailable, so branch creation could not
+complete its required confirmation flow. A `walvr-vocal-preview` branch must
+exist and be verified separately before rebinding the preview app to it. Do
+not substitute the production database merely to unblock deployment.
