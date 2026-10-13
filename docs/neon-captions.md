@@ -103,3 +103,15 @@ decoder thread; this limits the cache, not total process memory. Caption-only
 renders retain their previous settings. The export smoke test uses the same
 decoder settings. The actual-footage comparison is an offline render with
 saved experimental timings, not a signed-in Create or an accuracy assessment.
+
+## Lost Create responses
+
+The upload page keeps its current attempt locked after network failures,
+unconfirmed success responses, HTTP 409, or server/gateway errors. Its action
+becomes Check Dashboard instead of creating another upload and billable video.
+Explicit permission/credit/input rejections remain correctable; the renderer's
+pre-reservation configuration rejection is identified by its stable code.
+This is a guard for the current page, not deduplication across refreshes or tabs.
+The existing database reservation still protects retries of the same video ID.
+Tests execute the upload component with a lost accepted response and server
+failure, then verify one upload, one row, one POST and dashboard navigation.

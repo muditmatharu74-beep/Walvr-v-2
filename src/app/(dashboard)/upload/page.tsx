@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { MAX_UPLOAD_BYTES, AUDIO_EXTENSIONS } from "@/lib/rendering/upload";
-import { confirmSubmission } from "@/lib/rendering/submission-response";
+import { submitAndConfirm, SubmissionUnconfirmedError } from "@/lib/rendering/submission-response";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -34,6 +34,7 @@ export default function UploadPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [selectedCaption, setSelectedCaption] = useState("bold-overlay");
   const [loading, setLoading] = useState(false);
+  const [submissionUnconfirmed, setSubmissionUnconfirmed] = useState(false);
   const [error, setError] = useState("");
   const errorRef = useRef<HTMLParagraphElement>(null);
   const submittingRef = useRef(false);
@@ -118,7 +119,7 @@ export default function UploadPage() {
         .single();
       if (dbError) throw dbError;
 
-      const res = await fetch("/api/process", {
+      await submitAndConfirm(fetch, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -132,12 +133,17 @@ export default function UploadPage() {
         }),
       });
 
-      await confirmSubmission(res);
       router.push("/dashboard");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
-      submittingRef.current = false;
+      if (err instanceof SubmissionUnconfirmedError) {
+        setSubmissionUnconfirmed(true);
+        setError("We could not confirm the response. Your video may already be processing. Check your dashboard before creating another video.");
+        // Keep this attempt locked: another upload would create another billable job.
+      } else {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+        submittingRef.current = false;
+      }
     }
   }
 
@@ -376,8 +382,8 @@ export default function UploadPage() {
                 </div>
                 <div style={{ display: "flex", gap: "1rem" }}>
                   <button onClick={() => setStep("template")} style={{ flex: 1, padding: "1rem", background: "transparent", color: "rgba(245,240,235,0.4)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "0.8rem", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Georgia', serif" }}>← Back</button>
-                  <button onClick={handleSubmit} disabled={loading} style={{ flex: 2, padding: "1rem", background: "#8b0014", color: "#f5f0eb", border: "1px solid rgba(200,16,46,0.6)", fontSize: "0.8rem", letterSpacing: "0.2em", textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "'Georgia', serif" }}>
-                    {loading ? "Creating..." : "Create Video →"}
+                  <button onClick={submissionUnconfirmed ? () => router.push("/dashboard") : handleSubmit} disabled={loading} style={{ flex: 2, padding: "1rem", background: "#8b0014", color: "#f5f0eb", border: "1px solid rgba(200,16,46,0.6)", fontSize: "0.8rem", letterSpacing: "0.2em", textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "'Georgia', serif" }}>
+                    {loading ? "Creating..." : submissionUnconfirmed ? "Check Dashboard →" : "Create Video →"}
                   </button>
                 </div>
               </div>
