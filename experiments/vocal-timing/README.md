@@ -79,6 +79,11 @@ returned zero original-mix and vocal segments. On the working 25-second excerpt,
 both small and medium produced 73 aligned words. These measurements alone do
 not justify changing the default from small or declaring either model accurate.
 
+Separate left/right recognition on the difficult excerpt returned only the
+word "Music" in each channel. Results with fewer than three aligned words in
+an excerpt of at least 15 seconds now require review. This is a conservative
+screen, not a proof of hallucination: a real sparse lyric can also need review.
+
 Pilot comparison (2026-10-11): the same 45-second music excerpt produced
 104 aligned words without speech VAD and 103 with it after vocal separation.
 Neither run rejected word timestamps; these counts do not establish lyric

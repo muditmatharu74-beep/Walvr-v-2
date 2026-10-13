@@ -1,9 +1,16 @@
 import unittest
 import os
 from pathlib import Path
-from pipeline import checked_words, private_output_path, choose_recognition
+from pipeline import checked_words, private_output_path, choose_recognition, review_reasons_for
 
 class TimelineTests(unittest.TestCase):
+    def test_one_timed_music_word_cannot_automatically_caption_a_long_excerpt(self):
+        words = [{'word': 'Music', 'start': 2.08, 'end': 3.48}]
+        self.assertIn('sparse_recognition', review_reasons_for(words, 0, 1, 'vocals', 25))
+        # Keep an actual short one-word lyric intact; a sparse longer song needs review.
+        self.assertEqual(review_reasons_for(words, 0, 1, 'vocals', 4), [])
+        self.assertIn('original_mix_fallback', review_reasons_for(words * 4, 0, 1, 'original_mix', 25))
+
     def test_separation_is_preferred_even_when_original_has_more_words(self):
         vocal = [{'text': 'hello'}]
         original = [{'text': 'more words do not prove better recognition'}]

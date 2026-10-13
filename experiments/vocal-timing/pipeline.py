@@ -73,6 +73,23 @@ def choose_recognition(vocals, original=None):
     return [], 'none', True
 
 
+def review_reasons_for(words, rejected, coverage, source, excerpt_duration):
+    reasons = []
+    if not words:
+        reasons.append('no_usable_lyrics')
+    if source == 'original_mix':
+        reasons.append('original_mix_fallback')
+    if rejected:
+        reasons.append('rejected_alignment_words')
+    if words and coverage < 0.9:
+        reasons.append('partial_alignment')
+    # A long instrumental or failed recognizer can return a single "Music" word.
+    # Flag sparsity, rather than deleting a word that might be a genuine lyric.
+    if words and excerpt_duration >= 15 and len(words) < 3:
+        reasons.append('sparse_recognition')
+    return reasons
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('audio', type=Path)
@@ -166,11 +183,8 @@ def main():
                  if float(t) + args.start < duration]
         expected_words = sum(len(s['text'].split()) for s in segments)
         coverage = len(words) / max(1, expected_words)
-        review_reasons = []
-        if not words: review_reasons.append('no_usable_lyrics')
-        if recognition_source == 'original_mix': review_reasons.append('original_mix_fallback')
-        if rejected: review_reasons.append('rejected_alignment_words')
-        if words and coverage < 0.9: review_reasons.append('partial_alignment')
+        review_reasons = review_reasons_for(words, rejected, coverage, recognition_source,
+                                           len(source_samples) / sr)
         output = {'schemaVersion': 1, 'experimental': True, 'sourceSha256': source_hash,
             'songDuration': duration, 'excerptStart': args.start,
             'excerptDuration': len(source_samples) / sr, 'language': language,
