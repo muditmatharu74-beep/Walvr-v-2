@@ -107,3 +107,31 @@ Every original-mix fallback is flagged for review and remains blocked by the
 worker's final-render adapter. Empty results remain explicit failures. This
 adds a diagnostic recovery path without activating the worker or asserting
 that a sparse original-mix transcript is a correct lyric sequence.
+
+## CPU container rehearsal
+
+The worker image uses Python 3.12.14, pinned CPU Torch/Torchaudio 2.8.0 and the
+pilot's pinned recognition/alignment dependencies. It runs as UID/GID 10001,
+keeps job audio in private temporary directories, and never contains service
+credentials. CI builds it and checks native imports and worker/timeline tests
+with networking disabled. This checks packaging, not model accuracy or a live job.
+
+Build from the repository root:
+
+```sh
+docker build -f experiments/vocal-timing/Dockerfile -t walvr-vocal-worker:preview .
+```
+
+On the intended supervised host, supply configuration through its secret store
+or a private environment file, not an image layer. Mount a persistent `/cache`
+volume writable by UID/GID 10001 for Hugging Face and Torch model downloads.
+Use the preview configuration described above. A deployment bypass credential,
+if needed, belongs only in that host's secrets. Start one worker per container
+and configure restart supervision plus termination of the full container's
+process tree. Warm and measure the models on that host before enabling new jobs.
+No host or live queue is provisioned by building this image.
+
+The analysis timeout now stops the pipeline's entire POSIX process group,
+including a Demucs child that ignores SIGTERM. ffprobe has a separate 30-second
+timeout. These bounds avoid orphaned model processes after an analysis failure;
+they do not guarantee completion of every ten-minute song within 1100 seconds.

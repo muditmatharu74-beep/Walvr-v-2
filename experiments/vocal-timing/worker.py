@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -81,16 +82,39 @@ class Client:
             raise InputInvalid('Original audio changed or is empty')
 
 
+def run_analysis_command(command, log, timeout=1100):
+    """A timed-out pipeline must not leave separation/model children running."""
+    process = subprocess.Popen(command, stdout=log, stderr=log, start_new_session=True)
+    try:
+        return_code = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        # The pipeline may be waiting on Demucs. Stop the entire private group.
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(process.pid, sig)
+            except ProcessLookupError:
+                pass
+            if sig == signal.SIGTERM:
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
+        process.wait()
+        raise
+    if return_code:
+        raise subprocess.CalledProcessError(return_code, command)
+
+
 def analyze(audio, result, log):
     probe = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries',
-        'format=duration', '-of', 'json', str(audio)]))
+        'format=duration', '-of', 'json', str(audio)], timeout=30))
     duration = float(probe['format']['duration'])
     if not math.isfinite(duration) or not 0 < duration <= 600:
         raise InputInvalid('Use audio up to ten minutes long')
     # Default language detection; do not constrain every uploaded song to English.
-    subprocess.run([sys.executable, str(Path(__file__).with_name('pipeline.py')), str(audio),
+    run_analysis_command([sys.executable, str(Path(__file__).with_name('pipeline.py')), str(audio),
         '--output', str(result), '--asr-model', os.environ.get('WALVR_ASR_MODEL', 'small')],
-        stdout=log, stderr=log, check=True, timeout=1100)
+        log)
     return json.loads(result.read_text()), duration
 
 

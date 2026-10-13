@@ -1,0 +1,28 @@
+name: Vocal worker CPU image
+on:
+  pull_request:
+    paths:
+      - 'experiments/vocal-timing/**'
+      - '.dockerignore'
+      - '.github/workflows/vocal-worker-image.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build CPU worker without service credentials
+        run: docker build --file experiments/vocal-timing/Dockerfile --tag walvr-vocal-worker:test .
+      - name: Check native recognition and alignment imports
+        run: >-
+          docker run --rm --network none --entrypoint python walvr-vocal-worker:test
+          -c "import torch,torchaudio,whisperx,av,ctranslate2; from whisperx.alignment import load_align_model;
+          from faster_whisper import WhisperModel;
+          assert torch.__version__.split('+')[0]=='2.8.0'; assert not torch.cuda.is_available();
+          print('CPU recognition and alignment imports passed')"
+      - name: Test worker and timing guards offline
+        run: docker run --rm --network none --entrypoint python walvr-vocal-worker:test -m unittest discover -s /app -p 'test_*.py'

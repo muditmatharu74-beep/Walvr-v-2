@@ -74,6 +74,11 @@ vocal segments and only one zero-length original-mix word, which the new
 candidate gate rejects. These are feasibility checks, not human lyric accuracy
 measurements, and do not establish that the difficult upload is instrumental.
 
+The medium-model comparison on the same difficult 25-second excerpt also
+returned zero original-mix and vocal segments. On the working 25-second excerpt,
+both small and medium produced 73 aligned words. These measurements alone do
+not justify changing the default from small or declaring either model accurate.
+
 Pilot comparison (2026-10-11): the same 45-second music excerpt produced
 104 aligned words without speech VAD and 103 with it after vocal separation.
 Neither run rejected word timestamps; these counts do not establish lyric

@@ -1,11 +1,37 @@
 import hashlib
+import os
+import subprocess
+import sys
+import time
 from pathlib import Path
 import tempfile
 import unittest
-from worker import Client, InputInvalid, owned_source, run_once
+from worker import Client, InputInvalid, owned_source, run_once, run_analysis_command
 
 
 class WorkerTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'posix', 'Worker host uses POSIX process groups')
+    def test_analysis_timeout_stops_a_stubborn_descendant(self):
+        with tempfile.TemporaryDirectory() as work:
+            marker = Path(work) / 'heartbeat'
+            child = ('import signal,time,pathlib; signal.signal(signal.SIGTERM,signal.SIG_IGN); '
+                     'p=pathlib.Path(' + repr(str(marker)) + '); '
+                     '\nwhile True:\n p.write_text(str(time.monotonic())); time.sleep(.02)')
+            parent = ('import subprocess,sys,time; subprocess.Popen([sys.executable,"-c",' +
+                      repr(child) + ']); time.sleep(30)')
+            with (Path(work) / 'log').open('w') as log:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    run_analysis_command([sys.executable, '-c', parent], log, timeout=.5)
+            self.assertTrue(marker.exists(), 'The descendant must start for this check')
+            heartbeat = marker.read_text()
+            time.sleep(.1)
+            self.assertEqual(marker.read_text(), heartbeat, 'Descendant survived the timeout')
+
+    def test_analysis_nonzero_exit_is_not_a_success(self):
+        with tempfile.TemporaryFile(mode='w') as log:
+            with self.assertRaises(subprocess.CalledProcessError):
+                run_analysis_command([sys.executable, '-c', 'raise SystemExit(7)'], log)
+
     def test_worker_configuration_and_owned_uploads(self):
         origin = 'https://storage.example.test'
         good = origin + '/storage/v1/object/public/uploads/owner/song.mp3'
