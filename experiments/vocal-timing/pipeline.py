@@ -50,6 +50,29 @@ def checked_words(words, offset, duration):
     return accepted, rejected
 
 
+def has_lyric_text(segments):
+    """Empty/punctuation/music-marker output is not a usable recognition path."""
+    return any(isinstance(s.get('text'), str) and any(c.isalpha() for c in s['text'])
+               for s in segments)
+
+
+def choose_recognition(vocals, original=None):
+    """Prefer separated vocals. A mix fallback is a review candidate, not proof."""
+    if has_lyric_text(vocals):
+        return vocals, 'vocals', False
+    # An empty separation plus a zero-length ASR word is not a recovered lyric.
+    timed_original = original is not None and any(
+        isinstance(w.get('word'), str) and any(c.isalpha() for c in w['word']) and
+        isinstance(w.get('start'), (int, float)) and not isinstance(w['start'], bool) and
+        isinstance(w.get('end'), (int, float)) and not isinstance(w['end'], bool) and
+        math.isfinite(w['start']) and math.isfinite(w['end']) and
+        0 <= w['start'] < w['end']
+        for s in original for w in s.get('words', []))
+    if timed_original and has_lyric_text(original):
+        return original, 'original_mix', True
+    return [], 'none', True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('audio', type=Path)
@@ -111,16 +134,27 @@ def main():
             result = [{'start': s.start, 'end': s.end, 'text': s.text,
                        'words': [{'word': w.word, 'start': w.start, 'end': w.end} for w in s.words or []]}
                       for s in segments]
-            return result, info.language
-        baseline = recognize(original)[0] if args.baseline else None
-        segments, language = recognize(vocals)
+            return result, info.language, float(info.language_probability)
+        original_result = recognize(original) if args.baseline else None
+        vocal_result = recognize(vocals)
+        # Separation can remove or distort vocals. Check the original once before
+        # declaring recognition empty, without relaxing silence/hallucination guards.
+        if not has_lyric_text(vocal_result[0]) and original_result is None:
+            print(json.dumps({'stage': 'original_mix_check'}), flush=True)
+            original_result = recognize(original)
+        segments, recognition_source, fallback_review = choose_recognition(
+            vocal_result[0], original_result[0] if original_result else None)
+        selected_result = original_result if recognition_source == 'original_mix' else vocal_result
+        language, language_probability = selected_result[1:]
+        alignment_audio = original if recognition_source == 'original_mix' else vocals
+        baseline = original_result[0] if args.baseline and original_result else None
         del model
         gc.collect()
         print(json.dumps({'stage': 'alignment', 'segments': len(segments), 'language': language}), flush=True)
         if segments:
             alignment_model, metadata = whisperx.load_align_model(language_code=language, device=args.device)
             aligned = whisperx.align(segments, alignment_model, metadata,
-                whisperx.load_audio(str(vocals)), args.device, interpolate_method='ignore',
+                whisperx.load_audio(str(alignment_audio)), args.device, interpolate_method='ignore',
                 return_char_alignments=False)
             words, rejected = checked_words(aligned['word_segments'], args.start, duration)
         else:
@@ -132,17 +166,28 @@ def main():
                  if float(t) + args.start < duration]
         expected_words = sum(len(s['text'].split()) for s in segments)
         coverage = len(words) / max(1, expected_words)
+        review_reasons = []
+        if not words: review_reasons.append('no_usable_lyrics')
+        if recognition_source == 'original_mix': review_reasons.append('original_mix_fallback')
+        if rejected: review_reasons.append('rejected_alignment_words')
+        if words and coverage < 0.9: review_reasons.append('partial_alignment')
         output = {'schemaVersion': 1, 'experimental': True, 'sourceSha256': source_hash,
             'songDuration': duration, 'excerptStart': args.start,
             'excerptDuration': len(source_samples) / sr, 'language': language,
             'text': ' '.join(s['text'].strip() for s in segments), 'words': words, 'beats': beats,
-            'reviewRequired': not words or rejected > 0 or coverage < 0.9,
+            'reviewRequired': fallback_review or bool(review_reasons),
             'diagnostics': {'asrModel': args.asr_model, 'vadFilter': args.vad_filter,
                 'separationModel': 'htdemucs', 'alignmentModel': 'whisperx',
                 'humanVerified': False,
+                'recognitionSource': recognition_source,
+                'languageProbability': language_probability,
+                'reviewReasons': review_reasons,
+                'vocalSegmentCount': len(vocal_result[0]),
+                'originalSegmentCount': len(original_result[0]) if original_result else None,
                 'elapsedSeconds': round(time.monotonic() - started, 2),
                 'rejectedWords': rejected, 'alignmentCoverage': round(coverage, 3),
-                'baseline': baseline, 'separatedSegments': segments}}
+                'baseline': baseline, 'separatedSegments': vocal_result[0],
+                'originalSegments': original_result[0] if original_result else None}}
         if hashlib.sha256(args.audio.read_bytes()).hexdigest() != source_hash:
             raise RuntimeError('Source file changed during analysis')
         args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -53,6 +53,27 @@ This is a candidate configuration, not a verified accuracy improvement. Run
 both configurations against the same excerpt and manually compare missing,
 wrong, early, and late words before selecting it for the worker.
 
+### Empty-separation recovery
+
+The pipeline now checks the original mix once when the vocal-stem recognition
+has no alphabetic lyric text. It retains the normal recognition thresholds;
+silence is not forced into words. The mix must contain at least one ASR word
+with a finite, positive-length timestamp before it becomes a candidate.
+The alignment input follows the selected recognition source: vocals for the
+normal path, original audio for a mix candidate. Both share the unchanged
+source clock. A mix fallback always requires review, so it cannot automatically
+pass the final-render adapter or become a paid worker render.
+
+Private diagnostics include recognition source, language probability, original
+and vocal segment counts, and review reasons. `--baseline` can compare the
+original even when separation succeeds. More words alone do not choose the mix.
+
+On 2026-10-12, the updated path aligned 73 words from a 25-second excerpt of
+the working upload. A 45-second excerpt of the difficult upload returned no
+vocal segments and only one zero-length original-mix word, which the new
+candidate gate rejects. These are feasibility checks, not human lyric accuracy
+measurements, and do not establish that the difficult upload is instrumental.
+
 Pilot comparison (2026-10-11): the same 45-second music excerpt produced
 104 aligned words without speech VAD and 103 with it after vocal separation.
 Neither run rejected word timestamps; these counts do not establish lyric

@@ -1,9 +1,28 @@
 import unittest
 import os
 from pathlib import Path
-from pipeline import checked_words, private_output_path
+from pipeline import checked_words, private_output_path, choose_recognition
 
 class TimelineTests(unittest.TestCase):
+    def test_separation_is_preferred_even_when_original_has_more_words(self):
+        vocal = [{'text': 'hello'}]
+        original = [{'text': 'more words do not prove better recognition'}]
+        self.assertEqual(choose_recognition(vocal, original), (vocal, 'vocals', False))
+
+    def test_empty_vocals_can_use_original_only_as_a_review_candidate(self):
+        original = [{'text': 'hello', 'start': 1, 'end': 2,
+                     'words': [{'word': 'hello', 'start': 1, 'end': 2}]}]
+        for vocal in [[], [{'text': '♪ ...'}], [{'text': '  '}]]:
+            self.assertEqual(choose_recognition(vocal, original), (original, 'original_mix', True))
+        # Do not turn punctuation from either path into lyrics, including on silence.
+        self.assertEqual(choose_recognition([], [{'text': '♪'}]), ([], 'none', True))
+        self.assertEqual(choose_recognition([], [{'text': 'Entertain',
+            'words': [{'word': 'Entertain', 'start': .56, 'end': .56}]}]), ([], 'none', True))
+
+    def test_non_english_vocals_are_not_discarded(self):
+        vocals = [{'text': 'こんにちは'}]
+        self.assertEqual(choose_recognition(vocals), (vocals, 'vocals', False))
+
     def test_private_output_cannot_replace_audio_or_enter_public_repository(self):
         with self.assertRaisesRegex(ValueError, 'overwrite'):
             private_output_path(Path('/private/song.mp3'), Path('/private/song.mp3'), Path('/repo'))

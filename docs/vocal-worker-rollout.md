@@ -99,3 +99,11 @@ several full songs to human-checked words/timings before production, including
 quiet vocals, rap, held notes, repeated choruses and instrumental breaks.
 
 No preview worker host or live migration is activated by committing this code.
+
+The pipeline's empty-vocal recovery checks the original mix before returning
+no usable lyrics. Positive-length ASR words are required for a mix candidate;
+candidate words are aligned against the original mix, not the failed stem.
+Every original-mix fallback is flagged for review and remains blocked by the
+worker's final-render adapter. Empty results remain explicit failures. This
+adds a diagnostic recovery path without activating the worker or asserting
+that a sparse original-mix transcript is a correct lyric sequence.
