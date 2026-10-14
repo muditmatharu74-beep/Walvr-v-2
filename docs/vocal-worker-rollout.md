@@ -164,3 +164,54 @@ connected cost-check operation was unavailable, so branch creation could not
 complete its required confirmation flow. A `walvr-vocal-preview` branch must
 exist and be verified separately before rebinding the preview app to it. Do
 not substitute the production database merely to unblock deployment.
+
+## Model warm-up before claims
+
+Worker startup now runs native/cache checks and loads all three model stages
+in a child process before its first queue claim. That child has a 600-second
+timeout with process-group cleanup. A download failure, malformed readiness
+report or native crash exits startup; no analysis job is claimed. The child
+exits after loading, so model weights do not remain in the idle worker's memory.
+Job processes still load cached weights during analysis.
+
+The default is the evaluated `small` recognizer and English alignment warm-up.
+`WALVR_WARM_LANGUAGE` selects the alignment language to pre-load; it does not
+force the language used during recognition. Other detected languages may need
+an additional alignment download during their first analysis.
+
+Check warm-up separately without app credentials or customer audio:
+
+```sh
+python experiments/vocal-timing/preflight.py --warm-models --asr-model small --language en
+```
+
+CI performs this real download/load check in the non-root CPU container. The
+offline tests also verify that warm-up completes before a claim, and that a
+failed warm-up cannot claim a job. A warm cache is not evidence of lyric accuracy.
+
+## Accuracy against a checked reference
+
+`evaluate.py` compares an analysis with a private reference containing
+`humanVerified: true`, the original `sourceSha256`, `songDuration`,
+`excerptStart`, `excerptDuration`, and ordered `words` (`word`, `start`, `end`).
+A person must verify those words/times against the audio first; copying ASR
+output and marking it verified does not create a valid reference.
+
+```sh
+python experiments/vocal-timing/evaluate.py /private/analysis.json /private/reference.json --tolerance-ms 150
+```
+
+It prints counts of missing, extra and substituted words, word-error rate,
+matched-word timing errors, and the fraction of reference words that are both
+correct and within the timing tolerance. The 150 ms default is an adjustable
+test target. Repeated words use timing to break ties between equally good text
+alignments. Timing statistics cover correctly matched words, so inspect them
+together with word-error rate and reference coverage.
+
+A human-confirmed instrumental reference can have no words; the report then
+counts false-positive caption words and leaves word-error rate undefined.
+Punctuation and case are normalized; Unicode letters and numbers are retained.
+Different source hashes/intervals, invalid timings and unverified references
+are rejected. Reports contain aggregates only, not the private lyric text.
+The scoring tests use synthetic references; no human accuracy score is claimed
+for either saved upload yet.

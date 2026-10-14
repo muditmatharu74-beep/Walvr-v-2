@@ -168,19 +168,34 @@ def run_once(client, analyzer=analyze):
     return True
 
 
+def prepare_models(asr_model, language):
+    # Bound startup downloads and reclaim the model-loading process's memory.
+    with tempfile.TemporaryFile(mode='w+') as log:
+        run_analysis_command([sys.executable, str(Path(__file__).with_name('preflight.py')),
+                              '--warm-models', '--asr-model', asr_model, '--language', language],
+                             log, timeout=600)
+        log.seek(0)
+        result = json.loads(log.read().strip().splitlines()[-1])
+    if result.get('modelsWarmed') is not True:
+        raise RuntimeError('Model warmup did not confirm readiness')
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args()
     client = Client(os.environ['WALVR_APP_URL'], os.environ['WALVR_VOCAL_WORKER_SECRET'],
                     os.environ['WALVR_STORAGE_ORIGIN'], os.environ.get('WALVR_PREVIEW_BYPASS_TOKEN'))
-    # Detect missing native libraries/cache permissions before claiming any job.
-    from preflight import check_runtime
+    # Check runtime and models in a bounded child before claiming any job.
+    # A native crash is then reported as startup failure, not a worker crash.
     try:
-        check_runtime()
+        readiness = prepare_models(os.environ.get('WALVR_ASR_MODEL', 'small'),
+                                   os.environ.get('WALVR_WARM_LANGUAGE', 'en'))
+        print(json.dumps({'worker': 'vocal-timing', 'readiness': readiness}), flush=True)
     except Exception:
         print(json.dumps({'worker': 'vocal-timing', 'startupFailed': True,
-                          'reason': 'runtime_or_cache_unavailable'}), flush=True)
+                          'reason': 'runtime_cache_or_model_unavailable'}), flush=True)
         raise SystemExit(1)
     while True:
         try:

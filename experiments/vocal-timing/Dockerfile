@@ -23,6 +23,7 @@ COPY experiments/vocal-timing/pipeline.py experiments/vocal-timing/worker.py \
     experiments/vocal-timing/preflight.py \
     experiments/vocal-timing/test_pipeline.py experiments/vocal-timing/test_worker.py \
     experiments/vocal-timing/test_preflight.py /app/experiments/vocal-timing/
+COPY experiments/vocal-timing/evaluate.py experiments/vocal-timing/test_evaluate.py /app/experiments/vocal-timing/
 RUN mkdir -p /cache/huggingface /cache/torch /tmp/walvr \
     && chown -R 10001:10001 /cache /tmp/walvr && chmod 700 /tmp/walvr
 USER 10001:10001

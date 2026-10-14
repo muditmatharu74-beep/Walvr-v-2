@@ -29,3 +29,6 @@ jobs:
         run: docker run --rm --network none --entrypoint python walvr-vocal-worker:test -m unittest discover -s /app/experiments/vocal-timing -p 'test_*.py'
       - name: Check actual worker readiness as the unprivileged container user
         run: docker run --rm --network none --entrypoint python walvr-vocal-worker:test preflight.py
+      - name: Warm actual CPU models without customer audio or service credentials
+        timeout-minutes: 10
+        run: docker run --rm --entrypoint python walvr-vocal-worker:test preflight.py --warm-models
