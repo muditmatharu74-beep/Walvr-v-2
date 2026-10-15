@@ -10,6 +10,28 @@ import worker
 
 
 class ReadinessTests(unittest.TestCase):
+    def test_bad_or_missing_configuration_exits_before_model_loading_or_claims(self):
+        base = {'WALVR_APP_URL': 'https://app.test', 'WALVR_STORAGE_ORIGIN': 'https://storage.test',
+                'WALVR_VOCAL_WORKER_SECRET': 'private-worker-secret' * 2}
+        cases = [dict(base, WALVR_STORAGE_ORIGIN='https://storage.test/wrong-path'),
+                 dict(base, WALVR_APP_URL='https://'),
+                 dict(base, WALVR_VOCAL_WORKER_SECRET='short-private-secret'),
+                 {k: v for k, v in base.items() if k != 'WALVR_STORAGE_ORIGIN'}]
+        for env in cases:
+            output = io.StringIO()
+            with self.subTest(keys=sorted(env)), patch.dict(os.environ, env, clear=True), \
+                    patch('sys.argv', ['worker.py', '--once']), \
+                    patch('worker.prepare_models') as warm, patch('worker.run_once') as claim, \
+                    contextlib.redirect_stdout(output):
+                with self.assertRaises(SystemExit) as result:
+                    worker.main()
+            self.assertEqual(result.exception.code, 1)
+            warm.assert_not_called()
+            claim.assert_not_called()
+            self.assertIn('configuration_runtime_cache_or_model_unavailable', output.getvalue())
+            self.assertNotIn('private-worker-secret', output.getvalue())
+            self.assertNotIn('short-private-secret', output.getvalue())
+
     def test_runtime_check_probes_binaries_and_both_caches_without_claiming_models_warm(self):
         with tempfile.TemporaryDirectory() as work:
             env = {'HF_HOME': str(Path(work) / 'hf'), 'TORCH_HOME': str(Path(work) / 'torch')}
@@ -68,3 +90,4 @@ class ReadinessTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

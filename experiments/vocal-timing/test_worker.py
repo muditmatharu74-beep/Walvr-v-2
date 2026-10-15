@@ -68,6 +68,23 @@ class WorkerTests(unittest.TestCase):
             with self.assertRaises(InputInvalid):
                 client.download(job, Path(work) / 'changed')
 
+    def test_both_origins_are_validated_before_any_network_request(self):
+        good = 'https://app.test'
+        invalid = ['https://', 'http://app.test', 'https://app.test/path',
+                   'https://u:p@app.test', 'https://@app.test',
+                   'https://app.test?key=private', 'https://app.test#fragment',
+                   'https://app.test?', 'https://app.test#', 'https://app.test\\path',
+                   'https://app.test:bad', 'https://app.test:70000',
+                   'https://app.test:0', 'https://app.\ntest',
+                   ' https://app.test', 'https://app%2etest']
+        for bad in invalid:
+            for app, storage in [(bad, good), (good, bad)]:
+                with self.subTest(app=app, storage=storage), self.assertRaises(ValueError):
+                    Client(app, 'x' * 32, storage)
+        client = Client(good + '/', 'x' * 32, 'https://storage.test:443/')
+        self.assertEqual(client.endpoint, good + '/api/internal/vocal-jobs')
+        self.assertEqual(client.storage_origin, 'https://storage.test:443')
+
     def test_lost_completion_response_repeats_fenced_report_not_analysis(self):
         class Fake:
             calls = []

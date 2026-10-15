@@ -229,3 +229,14 @@ failures before reporting still use the existing fenced failure path.
 Regression tests cover exhausted completion responses, identical report payloads,
 a single analysis per claim, temporary-audio cleanup and genuine model failures.
 These checks do not replace a live outage/restart rehearsal on the preview host.
+
+## Reject configuration errors before queue claims
+
+Startup validates both HTTPS origins before model warm-up or any claim. Origins
+must have a hostname, a valid nonzero port when supplied, and no credentials,
+path beyond `/`, query/fragment delimiters, whitespace, backslashes or encoded
+hostname. A trailing slash is normalized. Invalid or missing configuration
+exits with the same private startup diagnostic as other readiness failures;
+configuration values and worker credentials are never included in that message.
+This prevents an incorrect Storage origin from consuming a queued analysis
+attempt or turning a setup error into a customer-facing input failure.

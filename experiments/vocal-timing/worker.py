@@ -32,6 +32,23 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise InputInvalid('Redirects are not permitted')
 
 
+def https_origin(value):
+    # Validate before warming models or claiming a job. urlsplit strips some
+    # control characters, so inspect the original configuration first.
+    if (not isinstance(value, str) or any(c.isspace() or ord(c) < 32 for c in value)
+            or any(c in value for c in ('?', '#', '\\'))):
+        raise ValueError('Provide a valid HTTPS origin')
+    url = urllib.parse.urlsplit(value)
+    if (url.scheme != 'https' or not url.hostname or url.username is not None
+            or url.password is not None or url.query or url.fragment
+            or url.path not in ('', '/') or '%' in url.hostname):
+        raise ValueError('Provide a valid HTTPS origin')
+    # Accessing port also rejects nonnumeric and out-of-range values.
+    if url.port == 0:
+        raise ValueError('Provide a valid HTTPS origin')
+    return value.rstrip('/')
+
+
 def owned_source(url, user_id, storage_origin):
     source, origin = urllib.parse.urlsplit(url), urllib.parse.urlsplit(storage_origin)
     prefix = f'/storage/v1/object/public/uploads/{user_id}/'
@@ -47,10 +64,8 @@ def owned_source(url, user_id, storage_origin):
 
 class Client:
     def __init__(self, app_url, secret, storage_origin, bypass=None):
-        url = urllib.parse.urlsplit(app_url)
-        if (url.scheme != 'https' or url.username or url.password or url.query or url.fragment
-                or url.path not in ('', '/')):
-            raise ValueError('Provide an HTTPS app origin')
+        app_url = https_origin(app_url)
+        storage_origin = https_origin(storage_origin)
         if len(secret) < 32:
             raise ValueError('Worker secret must have at least 32 characters')
         self.endpoint = app_url.rstrip('/') + '/api/internal/vocal-jobs'
@@ -190,17 +205,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args()
-    client = Client(os.environ['WALVR_APP_URL'], os.environ['WALVR_VOCAL_WORKER_SECRET'],
-                    os.environ['WALVR_STORAGE_ORIGIN'], os.environ.get('WALVR_PREVIEW_BYPASS_TOKEN'))
     # Check runtime and models in a bounded child before claiming any job.
     # A native crash is then reported as startup failure, not a worker crash.
     try:
+        client = Client(os.environ['WALVR_APP_URL'], os.environ['WALVR_VOCAL_WORKER_SECRET'],
+                        os.environ['WALVR_STORAGE_ORIGIN'], os.environ.get('WALVR_PREVIEW_BYPASS_TOKEN'))
         readiness = prepare_models(os.environ.get('WALVR_ASR_MODEL', 'small'),
                                    os.environ.get('WALVR_WARM_LANGUAGE', 'en'))
         print(json.dumps({'worker': 'vocal-timing', 'readiness': readiness}), flush=True)
     except Exception:
         print(json.dumps({'worker': 'vocal-timing', 'startupFailed': True,
-                          'reason': 'runtime_cache_or_model_unavailable'}), flush=True)
+                          'reason': 'configuration_runtime_cache_or_model_unavailable'}), flush=True)
         raise SystemExit(1)
     while True:
         try:
