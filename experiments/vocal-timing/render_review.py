@@ -20,6 +20,10 @@ def main():
     parser.add_argument('--start', type=float, default=10)
     parser.add_argument('--seconds', type=float, default=30)
     args = parser.parse_args()
+    # ffmpeg runs inside a private work directory; preserve caller-relative paths.
+    args.audio = args.audio.resolve()
+    args.analysis = args.analysis.resolve()
+    args.output = args.output.resolve()
     import math
     if not math.isfinite(args.start) or args.start < 0 or not math.isfinite(args.seconds) or args.seconds <= 0:
         parser.error('Invalid review interval')
@@ -43,7 +47,7 @@ Style: Label,DejaVu Sans,30,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,
 [Events]
 Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
 '''
-    lines = [f'Dialogue: 0,0:00:00.00,{ass_time(args.seconds)},Label,,0,0,0,,EXPERIMENTAL TIMING REVIEW\\NOriginal audio / separated-vocal alignment']
+    lines = [f'Dialogue: 0,0:00:00.00,{ass_time(args.seconds)},Label,,0,0,0,,EXPERIMENTAL TIMING REVIEW\\NOriginal audio / separated-vocal alignment\\NSource window: {args.start:g}s - {args.start + args.seconds:g}s']
     count = 0
     for word in data['words']:
         start, end = max(0, word['start'] - args.start), min(args.seconds, word['end'] - args.start)
@@ -70,3 +74,4 @@ Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
 
 if __name__ == '__main__':
     main()
+

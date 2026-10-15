@@ -4,6 +4,15 @@ from pathlib import Path
 from pipeline import checked_words, private_output_path, choose_recognition, review_reasons_for
 
 class TimelineTests(unittest.TestCase):
+    def test_scattered_words_across_a_full_song_require_review(self):
+        # A real 190-second comparison produced isolated two-word phrases.
+        # Six words exceed the old absolute count but are not a safe full-song result.
+        words = [{'word': 'phrase', 'start': i * 30, 'end': i * 30 + .5} for i in range(6)]
+        self.assertIn('sparse_recognition', review_reasons_for(words, 0, 1, 'vocals', 190.104))
+        self.assertEqual(len(words), 6, 'Review must not erase possibly genuine sparse lyrics')
+        dense = [{'word': 'lyric', 'start': i * .4, 'end': i * .4 + .2} for i in range(319)]
+        self.assertNotIn('sparse_recognition', review_reasons_for(dense, 0, 1, 'vocals', 153.992))
+
     def test_one_timed_music_word_cannot_automatically_caption_a_long_excerpt(self):
         words = [{'word': 'Music', 'start': 2.08, 'end': 3.48}]
         self.assertIn('sparse_recognition', review_reasons_for(words, 0, 1, 'vocals', 25))
@@ -63,3 +72,4 @@ class TimelineTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

@@ -85,7 +85,9 @@ def review_reasons_for(words, rejected, coverage, source, excerpt_duration):
         reasons.append('partial_alignment')
     # A long instrumental or failed recognizer can return a single "Music" word.
     # Flag sparsity, rather than deleting a word that might be a genuine lyric.
-    if words and excerpt_duration >= 15 and len(words) < 3:
+    # A few scattered phrases across a full song also exceed the old count gate.
+    if words and excerpt_duration >= 15 and (len(words) < 3 or
+            (excerpt_duration >= 30 and len(words) / excerpt_duration < 0.1)):
         reasons.append('sparse_recognition')
     return reasons
 
@@ -222,3 +224,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

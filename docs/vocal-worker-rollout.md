@@ -240,3 +240,22 @@ exits with the same private startup diagnostic as other readiness failures;
 configuration values and worker credentials are never included in that message.
 This prevents an incorrect Storage origin from consuming a queued analysis
 attempt or turning a setup error into a customer-facing input failure.
+
+## Full-recording sparse-output screening
+
+A 2026-10-15 full-recording comparison found that increasing recognizer size
+could produce a few isolated phrases across a roughly three-minute recording
+without recovering a usable lyric sequence. The small recognizer returned no
+usable lyrics for that recording. More output is not evidence of accuracy.
+The working recording also produced different transcripts with small and medium;
+neither has a human-verified full-song accuracy score.
+
+The sparse screen now requires review for fewer than three words in at least
+15 seconds, or fewer than one word per ten seconds across at least 30 seconds.
+It retains the recognized words for review. A genuinely sparse song can trigger
+this conservative screen; it is not an instrumental detector or hallucination
+proof. Normal dense output still needs listening and checked-reference scoring.
+
+The private review-video tool accepts caller-relative file paths by resolving
+them before ffmpeg changes to its temporary directory. Each clip labels its
+source interval, so excerpts from different parts of a song can be compared.
