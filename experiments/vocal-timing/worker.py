@@ -137,6 +137,7 @@ def run_once(client, analyzer=analyze):
 
     thread = threading.Thread(target=heartbeat, daemon=True)
     thread.start()
+    reporting_result = False
     try:
         with tempfile.TemporaryDirectory(prefix='walvr-job-') as work:
             os.chmod(work, 0o700)
@@ -147,6 +148,7 @@ def run_once(client, analyzer=analyze):
                 output, duration = analyzer(audio, result, log)
             if stale.is_set():
                 return True
+            reporting_result = True
             # HTTP retries repeat a fenced completion only, never the paid render.
             for attempt in range(3):
                 try:
@@ -157,10 +159,13 @@ def run_once(client, analyzer=analyze):
                         raise
                     stop.wait(2)
     except InputInvalid:
-        if not stale.is_set():
+        if not stale.is_set() and not reporting_result:
             client.send('fail', **lease, reason='input_invalid')
     except Exception:
-        if not stale.is_set():
+        # A completion request can have persisted even if every response was lost.
+        # Leave uncertain reports to the fenced database state / lease recovery.
+        # Do not turn a reporting outage into an analysis failure and refund.
+        if not stale.is_set() and not reporting_result:
             client.send('fail', **lease, reason='analysis_failed')
     finally:
         stop.set()
@@ -210,3 +215,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

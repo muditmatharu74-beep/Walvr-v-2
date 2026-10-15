@@ -102,6 +102,49 @@ class WorkerTests(unittest.TestCase):
         run_once(fake, lambda *args: self.fail('must not analyze bad input'))
         self.assertEqual(fake.calls[-1], ('fail', {'videoId': 'video', 'token': 'token', 'reason': 'input_invalid'}))
 
+    def test_exhausted_completion_reports_do_not_fail_or_refund_the_job(self):
+        class Fake:
+            def __init__(self, error): self.calls, self.error = [], error
+            def send(self, action, **payload):
+                self.calls.append((action, payload))
+                if action == 'claim':
+                    return {'job': {'videoId': 'video', 'token': 'token'}}
+                if action == 'complete':
+                    raise self.error('completion response unavailable')
+                raise AssertionError('Uncertain completion must not send ' + action)
+            def download(self, job, target): target.write_bytes(b'original')
+        analyzed, paths = [], []
+        def analyze(audio, result, log):
+            analyzed.append(audio.read_bytes())
+            paths.append(audio.parent)
+            return {'words': []}, 10
+        for error in (OSError, InputInvalid):
+            with self.subTest(error=error):
+                fake = Fake(error)
+                self.assertTrue(run_once(fake, analyze))
+                self.assertEqual([action for action, _ in fake.calls],
+                                 ['claim', 'complete', 'complete', 'complete'])
+                self.assertEqual(fake.calls[1][1], fake.calls[3][1])
+                self.assertFalse(paths[-1].exists(), 'Private audio must be removed after reporting failure')
+        self.assertEqual(analyzed, [b'original', b'original'])
+
+    def test_analysis_crash_still_reports_failure_and_cleans_audio(self):
+        class Fake:
+            def __init__(self): self.calls = []
+            def send(self, action, **payload):
+                self.calls.append((action, payload))
+                return {'job': {'videoId': 'video', 'token': 'token'}} if action == 'claim' else {'status': 'failed'}
+            def download(self, job, target): target.write_bytes(b'original')
+        paths = []
+        def analyze(audio, result, log):
+            paths.append(audio.parent)
+            raise RuntimeError('model crashed')
+        fake = Fake()
+        self.assertTrue(run_once(fake, analyze))
+        self.assertEqual(fake.calls[-1], ('fail', {'videoId': 'video', 'token': 'token', 'reason': 'analysis_failed'}))
+        self.assertFalse(paths[0].exists())
+
 
 if __name__ == '__main__':
     unittest.main()
+

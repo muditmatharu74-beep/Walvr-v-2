@@ -148,9 +148,9 @@ usage. Neither a paid service nor a database branch is created by this config.
 
 Configure the app origin, isolated Storage origin, worker secret and any preview
 bypass in Railway's private variables. Check the container with
-`python preflight.py` before allowing jobs. Worker startup performs that same
-native-library and writable-cache check before its first claim, and exits with
-a generic error if it fails. It does not claim that model downloads are warmed.
+`python preflight.py --warm-models` before allowing jobs. Worker startup performs
+native-library, writable-cache and model-load checks before its first claim,
+and exits with a generic error if any check fails.
 
 Railway documents permission problems when a volume is mounted into a non-root
 container. Verify that a `/cache` volume is writable by UID/GID 10001 before
@@ -215,3 +215,17 @@ Different source hashes/intervals, invalid timings and unverified references
 are rejected. Reports contain aggregates only, not the private lyric text.
 The scoring tests use synthetic references; no human accuracy score is claimed
 for either saved upload yet.
+
+## Completion reporting outages
+
+After analysis succeeds, the worker retries the same fenced completion report up
+to three times. If every response is unavailable (including blocked redirects),
+it removes temporary audio and stops heartbeats without sending an analysis
+failure. A completion may already have persisted. The database state determines
+whether a saved result can render or an expired analysis lease can retry; no
+worker-side assumption of failure triggers a refund. Genuine input and model
+failures before reporting still use the existing fenced failure path.
+
+Regression tests cover exhausted completion responses, identical report payloads,
+a single analysis per claim, temporary-audio cleanup and genuine model failures.
+These checks do not replace a live outage/restart rehearsal on the preview host.
