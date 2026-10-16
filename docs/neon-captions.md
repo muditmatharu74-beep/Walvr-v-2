@@ -5,7 +5,7 @@ Two independent caption choices for the existing template selector:
 - `clean-neon`: Montserrat 900, white phrases and cyan current-word highlighting, soft blue glow.
 - `pixel-neon`: Press Start 2P 400, uppercase retro game lettering, smaller size and restrained glow to preserve pixel edges.
 
-Both use the same word timestamps and deterministic layout: up to four words per phrase, breaks at punctuation or silence, bounded word slots that wrap within the central 80% of the frame. Long words shrink to fit. Captions sit around 69% of the frame height. Preview animation respects reduced-motion preferences.
+Both display one timed word at a time, centered around 69% of the frame height. Existing timestamp/punctuation normalization and safe word sizing are reused; long words shrink within the central 80% of the frame. A token disappears at the next word onset, so words do not overlap or show future lyrics across pauses. Inputs with tied starts remain combined because their timestamps cannot establish individual word order. Preview animation respects reduced-motion preferences.
 
 `/caption-preview` compares the styles on a synthetic backdrop with original sample text. It has no audio, footage, account data or paid operations. The upload caption cards use the same overlay component. The original five options remain available.
 
@@ -123,9 +123,9 @@ Clean Neon now uses the bundled Montserrat 900 font at a nominal 84px in the
 to the safe width, and line spacing increases to keep larger phrases apart.
 A dark outline and stronger blue glow improve contrast on the neon footage.
 
-Remotion and browser overlays use frame-derived phrase opacity: up to 80ms
+Remotion and browser overlays use frame-derived caption opacity: up to 80ms
 for entry and 120ms for exit, shortened for fast phrases. Visibility remains
-inside each existing phrase interval, preserving highlight timestamps and
+inside each existing word display interval, preserving highlight timestamps and
 caption-free gaps. The basic Remotion word style uses the same bounded fade.
 Creatomate text exports share the larger fonts; the fade is currently specific
 to the browser/Remotion overlay.
@@ -133,3 +133,11 @@ to the browser/Remotion overlay.
 The actual-song style review uses the existing muted pink/purple neon city
 clip behind the original song audio. It is a local export; serving the change
 through Create requires publishing the new preview Remotion bundle.
+
+## Single-word style revision
+
+The browser/Remotion overlay and Creatomate text export now center one normalized
+timed token per display. The 80ms entry / 120ms exit fade settings are unchanged,
+and remain bounded for fast words. A display ends no later than the next token
+start, retaining original highlight timings and clearing genuine pauses. The
+phrase-layout helper remains the shared input normalization/sizing stage.

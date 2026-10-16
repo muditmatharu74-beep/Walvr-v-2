@@ -1,8 +1,8 @@
 import { useMemo } from "react";
-import { captionOpacity, layoutNeonCaptions, neonDesign, type NeonStyle, type WordTiming } from "../lib/rendering/neon-captions";
+import { captionOpacity, layoutSingleWordCaptions, neonDesign, type NeonStyle, type WordTiming } from "../lib/rendering/neon-captions";
 
 export function NeonCaptionOverlay({ captions, style, time }: { captions: WordTiming[]; style: NeonStyle; time: number }) {
-  const phrases = useMemo(() => layoutNeonCaptions(captions, style), [captions, style]);
+  const phrases = useMemo(() => layoutSingleWordCaptions(captions, style), [captions, style]);
   const phrase = phrases.find(p => time >= p.start && time < p.end);
   const design = neonDesign(style);
   return <div style={{ position: "absolute", inset: 0, containerType: "inline-size", pointerEvents: "none" }}>

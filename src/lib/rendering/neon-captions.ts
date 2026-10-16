@@ -100,9 +100,21 @@ export function layoutNeonCaptions(captions: WordTiming[], style: NeonStyle) {
   });
 }
 
+// Reuse timestamp/punctuation normalization and safe font sizing, then give
+// each timed token its own centered display interval. Never retain a previous
+// token over the next one's onset or bridge a pause with future words.
+export function layoutSingleWordCaptions(captions: WordTiming[], style: NeonStyle) {
+  const words = layoutNeonCaptions(captions, style).flatMap(phrase => phrase.words);
+  return words.map((word, index) => ({
+    start: word.start,
+    end: Math.min(word.end + 0.1, words[index + 1]?.start ?? Infinity),
+    words: [{ ...word, x: 540, y: 1320 }],
+  }));
+}
+
 export function neonTextElements(captions: WordTiming[], style: NeonStyle) {
   const design = neonDesign(style);
-  return layoutNeonCaptions(captions, style).flatMap((phrase, p) => phrase.words.flatMap((word, w) => {
+  return layoutSingleWordCaptions(captions, style).flatMap((phrase, p) => phrase.words.flatMap((word, w) => {
     const base = {
       type: "text", track: 2, x: `${word.x / 10.8}%`, y: `${word.y / 19.2}%`,
       x_anchor: "50%", y_anchor: "50%", width: `${word.width / 10.8}%`, height: "5%",

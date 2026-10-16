@@ -7,8 +7,30 @@ const moduleObject = {exports:{}};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/rendering/neon-captions.ts','utf8'), {
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022},
 }).outputText,{module:moduleObject,exports:moduleObject.exports});
-const {layoutNeonCaptions,neonTextElements,creditCost,captionOpacity,neonDesign} = moduleObject.exports;
+const {layoutNeonCaptions,layoutSingleWordCaptions,neonTextElements,creditCost,captionOpacity,neonDesign} = moduleObject.exports;
 const sample = ['Late','night','ride','home'].map((word,i)=>({word,start:i*0.8,end:(i+1)*0.8}));
+
+test('single-word captions center each token, switch on time and clear real pauses',()=>{
+  for(const style of ['clean-neon','pixel-neon']){
+    const input=[{word:'first',start:1,end:1.8},{word:'next',start:1.5,end:1.7},
+      {word:'last',start:3,end:4}];
+    const before=JSON.stringify(input);
+    const displays=layoutSingleWordCaptions(input,style);
+    assert.equal(displays.length,3);
+    for(const display of displays){
+      assert.equal(display.words.length,1);
+      assert.equal(display.words[0].x,540);assert.equal(display.words[0].y,1320);
+    }
+    assert.equal(displays[0].end,1.5,'previous word must clear at the next onset');
+    const at=t=>displays.filter(p=>t>=p.start&&t<p.end);
+    assert.equal(at(1.51)[0].words[0].text.toLowerCase(),'next');
+    assert.equal(at(2).length,0,'do not display future lyrics across silence');
+    assert.equal(at(3.1).length,1);
+    assert.equal(JSON.stringify(input),before);
+    const bases=neonTextElements(input,style).filter(e=>e.track===2);
+    assert.deepEqual(Array.from(bases,e=>e.time),[1,1.5,3]);
+  }
+});
 
 test('fades stay inside phrase boundaries and leave fast lyrics readable',()=>{
   assert.equal(captionOpacity(.99,1,2),0);
