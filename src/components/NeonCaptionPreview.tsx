@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { NeonCaptionOverlay } from "./NeonCaptionOverlay";
 import type { NeonStyle } from "../lib/rendering/neon-captions";
-import "@fontsource/montserrat/latin-800.css";
+import "@fontsource/montserrat/latin-900.css";
 import "@fontsource/press-start-2p/latin-400.css";
 
 const SAMPLE = [

@@ -13,13 +13,24 @@ export function creditCost(plan: string, backgroundType?: string, style?: string
 export function neonDesign(style: NeonStyle) {
   const pixel = style === "pixel-neon";
   return {
-    family: pixel ? "Press Start 2P" : "Montserrat", weight: pixel ? 400 : 800,
-    fontSize: pixel ? 48 : 64, characterWidth: pixel ? 1.1 : 0.85,
-    glow: pixel ? 5 : 12, color: "#f5fbff", activeColor: "#63edff",
+    family: pixel ? "Press Start 2P" : "Montserrat", weight: pixel ? 400 : 900,
+    fontSize: pixel ? 60 : 84, characterWidth: pixel ? 1.1 : 0.85,
+    stroke: pixel ? 1.2 : 2.2,
+    glow: pixel ? 7 : 16, color: "#f5fbff", activeColor: "#63edff",
     fontUrl: pixel
       ? "https://cdn.jsdelivr.net/npm/@fontsource/press-start-2p@5.3.0/files/press-start-2p-latin-400-normal.woff"
-      : "https://cdn.jsdelivr.net/npm/@fontsource/montserrat@5.3.0/files/montserrat-latin-800-normal.woff",
+      : "https://cdn.jsdelivr.net/npm/@fontsource/montserrat@5.3.0/files/montserrat-latin-900-normal.woff",
   };
+}
+
+// Frame-derived fades work identically when seeking, exporting or previewing.
+// They stay inside the existing interval; no lyric timestamps are shifted.
+export function captionOpacity(time: number, start: number, end: number) {
+  if (![time, start, end].every(Number.isFinite) || end <= start || time < start || time >= end) return 0;
+  const duration = end - start;
+  const fadeIn = Math.min(0.08, duration / 3);
+  const fadeOut = Math.min(0.12, duration / 3);
+  return Math.max(0, Math.min(1, (time - start) / fadeIn, (end - time) / fadeOut));
 }
 
 // One deterministic layout feeds browser/Remotion previews and Creatomate.
@@ -81,7 +92,7 @@ export function layoutNeonCaptions(captions: WordTiming[], style: NeonStyle) {
       let left = (1080 - lineWidth) / 2;
       return line.map(slot => {
         const x = left + slot.width / 2; left += slot.width + 16;
-        return { ...slot, x, y: 1320 + (lineIndex - (lines.length - 1) / 2) * 100,
+        return { ...slot, x, y: 1320 + (lineIndex - (lines.length - 1) / 2) * 120,
           fontSize: Math.min(design.fontSize, (slot.width - 12) / slot.units) };
       });
     });

@@ -7,8 +7,22 @@ const moduleObject = {exports:{}};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/rendering/neon-captions.ts','utf8'), {
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022},
 }).outputText,{module:moduleObject,exports:moduleObject.exports});
-const {layoutNeonCaptions,neonTextElements,creditCost} = moduleObject.exports;
+const {layoutNeonCaptions,neonTextElements,creditCost,captionOpacity,neonDesign} = moduleObject.exports;
 const sample = ['Late','night','ride','home'].map((word,i)=>({word,start:i*0.8,end:(i+1)*0.8}));
+
+test('fades stay inside phrase boundaries and leave fast lyrics readable',()=>{
+  assert.equal(captionOpacity(.99,1,2),0);
+  assert.equal(captionOpacity(1,1,2),0);
+  assert.ok(captionOpacity(1.04,1,2)>0 && captionOpacity(1.04,1,2)<1);
+  assert.equal(captionOpacity(1.1,1,2),1);
+  assert.ok(captionOpacity(1.95,1,2)>0 && captionOpacity(1.95,1,2)<1);
+  assert.equal(captionOpacity(2,1,2),0);
+  assert.equal(captionOpacity(2.01,1,2),0);
+  assert.equal(captionOpacity(1.04,1,1.08),1,'an 80ms phrase must reach full opacity');
+  for(const args of [[NaN,0,1],[0,0,0],[0,1,0],[0,0,Infinity]]) assert.equal(captionOpacity(...args),0);
+  assert.equal(neonDesign('clean-neon').weight,900);
+  assert.ok(neonDesign('clean-neon').fontSize>64 && neonDesign('pixel-neon').fontSize>48);
+});
 
 test('both neon layouts keep short phrases in the phone safe area and preserve word timings',()=>{
   for(const style of ['clean-neon','pixel-neon']){

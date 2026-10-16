@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { layoutNeonCaptions, neonDesign, type NeonStyle, type WordTiming } from "../lib/rendering/neon-captions";
+import { captionOpacity, layoutNeonCaptions, neonDesign, type NeonStyle, type WordTiming } from "../lib/rendering/neon-captions";
 
 export function NeonCaptionOverlay({ captions, style, time }: { captions: WordTiming[]; style: NeonStyle; time: number }) {
   const phrases = useMemo(() => layoutNeonCaptions(captions, style), [captions, style]);
@@ -15,6 +15,8 @@ export function NeonCaptionOverlay({ captions, style, time }: { captions: WordTi
         fontFamily: `"${design.family}", sans-serif`, fontWeight: design.weight,
         fontSize: `${word.fontSize / 10.8}cqw`, lineHeight: 1.4, textAlign: "center", whiteSpace: "nowrap",
         color: active ? design.activeColor : design.color,
+        opacity: captionOpacity(time, phrase.start, phrase.end),
+        WebkitTextStroke: `${design.stroke / 10.8}cqw #05101a`, paintOrder: "stroke fill",
         textShadow: `0 2px 2px #05101a, 0 0 ${design.glow / 10.8}cqw #128dff`,
       }}>{word.text}</span>;
     })}

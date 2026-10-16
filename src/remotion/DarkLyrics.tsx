@@ -1,11 +1,11 @@
 import { useCurrentFrame, useVideoConfig, Audio, AbsoluteFill, Loop, OffthreadVideo } from "remotion";
 import type { NeonBackground } from "../lib/rendering/neon-background";
 
-import { isNeonStyle } from "../lib/rendering/neon-captions";
+import { captionOpacity, isNeonStyle } from "../lib/rendering/neon-captions";
 import { NeonCaptionOverlay } from "../components/NeonCaptionOverlay";
 import { useEffect, useState } from "react";
 import { delayRender, continueRender, cancelRender } from "remotion";
-import "@fontsource/montserrat/latin-800.css";
+import "@fontsource/montserrat/latin-900.css";
 import "@fontsource/press-start-2p/latin-400.css";
 
 type Caption = {
@@ -28,7 +28,7 @@ export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUr
   const [fontHandle] = useState(() => neon ? delayRender("Load neon caption font") : null);
   useEffect(() => {
     if (fontHandle === null) return;
-    const font = captionStyle === "pixel-neon" ? '400 48px "Press Start 2P"' : '800 64px "Montserrat"';
+    const font = captionStyle === "pixel-neon" ? '400 60px "Press Start 2P"' : '900 84px "Montserrat"';
     document.fonts.load(font).then(loaded => {
       if (!loaded.length) throw new Error("Neon caption font failed to load");
       continueRender(fontHandle);
@@ -99,6 +99,7 @@ export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUr
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          opacity: captionOpacity(currentTime, currentWord.start, currentWord.end + 0.1),
         }}>
           <p style={{
             fontFamily: "Montserrat, sans-serif",

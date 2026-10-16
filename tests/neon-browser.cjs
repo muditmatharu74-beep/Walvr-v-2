@@ -30,7 +30,7 @@ let browser;
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(url); await page.evaluate(() => document.fonts.ready);
   assert.equal(await page.locator('h2').count(), 2);
-  assert.ok(await page.evaluate(() => document.fonts.check('400 48px "Press Start 2P"') && document.fonts.check('800 64px "Montserrat"')));
+  assert.ok(await page.evaluate(() => document.fonts.check('400 48px "Press Start 2P"') && document.fonts.check('900 84px "Montserrat"')));
   assert.equal(await page.locator('[data-active="true"]').count(), 2);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'walvr-neon-'));
   await page.screenshot({ path: path.join(dir, 'desktop.png'), fullPage: true });
@@ -53,12 +53,12 @@ let browser;
   const helpers = load('src/lib/rendering/neon-captions.ts',require);
   const {NeonCaptionOverlay} = load('src/components/NeonCaptionOverlay.tsx',
     name=>name.includes('neon-captions')?helpers:require(name));
-  const fonts = [['Montserrat','montserrat','800'],['Press Start 2P','press-start-2p','400']].map(([family,pkg,weight])=>
+  const fonts = [['Montserrat','montserrat','900'],['Press Start 2P','press-start-2p','400']].map(([family,pkg,weight])=>
     `@font-face{font-family:"${family}";font-weight:${weight};src:url(data:font/woff;base64,${fs.readFileSync(path.join(root,`node_modules/@fontsource/${pkg}/files/${pkg}-latin-${weight}-normal.woff`)).toString('base64')}) format('woff');}`).join('');
   for(const style of ['clean-neon','pixel-neon']) for(const time of [0.16,0.55,1.2,1.6,2.15,2.55,3.6]) {
     const markup = renderToStaticMarkup(React.createElement(NeonCaptionOverlay,{captions:edgeCaptions,style,time}));
     await page.setContent(`<style>${fonts}body{margin:0;background:#080c15}.frame{position:relative;width:390px;height:693.333px}</style><div class="frame">${markup}</div>`);
-    await page.evaluate(()=>Promise.all([document.fonts.load('800 64px "Montserrat"'),document.fonts.load('400 48px "Press Start 2P"')]));
+    await page.evaluate(()=>Promise.all([document.fonts.load('900 84px "Montserrat"'),document.fonts.load('400 48px "Press Start 2P"')]));
     const spans = await page.locator('span').evaluateAll(words=>words.map(word=>{
       const bounds=word.getBoundingClientRect();const font=getComputedStyle(word);
       const context=document.createElement('canvas').getContext('2d');

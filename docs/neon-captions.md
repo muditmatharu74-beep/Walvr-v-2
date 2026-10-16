@@ -2,7 +2,7 @@
 
 Two independent caption choices for the existing template selector:
 
-- `clean-neon`: Montserrat 800, white phrases and cyan current-word highlighting, soft blue glow.
+- `clean-neon`: Montserrat 900, white phrases and cyan current-word highlighting, soft blue glow.
 - `pixel-neon`: Press Start 2P 400, uppercase retro game lettering, smaller size and restrained glow to preserve pixel edges.
 
 Both use the same word timestamps and deterministic layout: up to four words per phrase, breaks at punctuation or silence, bounded word slots that wrap within the central 80% of the frame. Long words shrink to fit. Captions sit around 69% of the frame height. Preview animation respects reduced-motion preferences.
@@ -115,3 +115,21 @@ This is a guard for the current page, not deduplication across refreshes or tabs
 The existing database reservation still protects retries of the same video ID.
 Tests execute the upload component with a lost accepted response and server
 failure, then verify one upload, one row, one POST and dashboard navigation.
+
+## Bulkier captions and phrase fades
+
+Clean Neon now uses the bundled Montserrat 900 font at a nominal 84px in the
+1080px design space; Pixel Neon uses 60px lettering. Long tokens still shrink
+to the safe width, and line spacing increases to keep larger phrases apart.
+A dark outline and stronger blue glow improve contrast on the neon footage.
+
+Remotion and browser overlays use frame-derived phrase opacity: up to 80ms
+for entry and 120ms for exit, shortened for fast phrases. Visibility remains
+inside each existing phrase interval, preserving highlight timestamps and
+caption-free gaps. The basic Remotion word style uses the same bounded fade.
+Creatomate text exports share the larger fonts; the fade is currently specific
+to the browser/Remotion overlay.
+
+The actual-song style review uses the existing muted pink/purple neon city
+clip behind the original song audio. It is a local export; serving the change
+through Create requires publishing the new preview Remotion bundle.
