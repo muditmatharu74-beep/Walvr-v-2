@@ -36,7 +36,9 @@ const edgeCaptions = require('./neon-edge-fixtures.cjs');
     assert.ok(audio,'MP4 must have audio'); assert.equal(audio.codec_name,'aac');
     assert.ok(Math.abs(Number(metadata.format.duration)-4)<0.1);
     const frameAt = time=>execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-ss',String(time),'-i',file,'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1'],{maxBuffer:10*1024*1024});
-    const samples = (scenario==='edges'?[0.16,0.55]:[0.4,1.2]).map(frameAt);
+    // Sample word interiors. At 0.16s the next 80ms token has just begun its
+    // intentional per-word fade, so a full-brightness threshold is inappropriate.
+    const samples = (scenario==='edges'?[0.2,0.6]:[0.4,1.2]).map(frameAt);
     let cyanPixels=0;
     const image=samples[0];for(let i=0;i<image.length;i+=3)if(image[i]<150&&image[i+1]>170&&image[i+2]>170)cyanPixels++;
     assert.ok(cyanPixels>100,'Current-word cyan highlight is missing');
