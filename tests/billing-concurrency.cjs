@@ -48,6 +48,23 @@ const assert=require('node:assert/strict');
   const payments=await overlap(stripe,['evt_a',user],stripe,['evt_b',user]);
   assert.equal(payments[1].rows[0].result,'duplicate_operation');
   assert.equal((await pool.query('select credits from profiles where id=$1',[user])).rows[0].credits,550);
-  console.log('PASS real PostgreSQL multi-connection: competing spends, repeated video, simultaneous refunds, same purchase with different Stripe events');
+  const vocal='22222222-2222-4222-8222-222222222224';
+  await pool.query('insert into videos(id,user_id) values($1,$2)',[vocal,user]);
+  await pool.query("select enqueue_vocal_job($1,$2,'https://storage.test/song.mp3',$3,'clean-neon',100,'free')",[user,vocal,'a'.repeat(64)]);
+  // SKIP LOCKED must return immediately on another connection, never double claim.
+  const a=await pool.connect(),b=await pool.connect();
+  try{
+    await a.query('begin');await a.query('set local role service_role');await b.query('set role service_role');
+    const claimed=(await a.query('select claim_vocal_analysis() result')).rows[0].result;
+    assert.equal(claimed.videoId,vocal);
+    assert.equal((await b.query('select claim_vocal_analysis() result')).rows[0].result,null);
+    await a.query('commit');
+    await a.query("select finish_vocal_analysis($1,$2,$3,10,null)",[vocal,claimed.token,{words:[]}]);
+    await a.query('begin');
+    assert.equal((await a.query('select claim_vocal_render() result')).rows[0].result.video_id,vocal);
+    assert.equal((await b.query('select claim_vocal_render() result')).rows[0].result,null);
+    await a.query('commit');
+  }finally{await a.query('rollback');await b.query('reset role');a.release();b.release()}
+  console.log('PASS real PostgreSQL multi-connection: competing spends, repeated video, simultaneous refunds, duplicate purchase, exclusive vocal analysis/render claims');
  }finally{await pool.end()}
 })().catch(e=>{console.error(e);process.exitCode=1});
