@@ -18,8 +18,8 @@ const CAPTION_STYLES = [
 ];
 
 CAPTION_STYLES.push(
-  { id: "clean-neon", label: "Clean Neon", desc: "Smooth white phrases with cyan word sync", preview: { text: "Late night", glow: true, bottom: false, yellow: false } },
-  { id: "pixel-neon", label: "Pixel Neon", desc: "Retro game lettering with a crisp blue glow", preview: { text: "LATE NIGHT", glow: true, bottom: false, yellow: false } },
+  { id: "clean-neon", label: "Clean Neon", desc: "Bold single words with soft fades and cyan glow", preview: { text: "Late", glow: true, bottom: false, yellow: false } },
+  { id: "pixel-neon", label: "Pixel Neon", desc: "Single-word game lettering with soft fades", preview: { text: "LATE", glow: true, bottom: false, yellow: false } },
 );
 
 const PLAN_ORDER = ["free", "starter", "pro", "business"];

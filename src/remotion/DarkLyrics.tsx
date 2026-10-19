@@ -3,7 +3,7 @@ import type { NeonBackground } from "../lib/rendering/neon-background";
 
 import { captionOpacity, isNeonStyle } from "../lib/rendering/neon-captions";
 import { NeonCaptionOverlay } from "../components/NeonCaptionOverlay";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { delayRender, continueRender, cancelRender } from "remotion";
 import "@fontsource/montserrat/latin-900.css";
 import "@fontsource/press-start-2p/latin-400.css";
@@ -38,14 +38,18 @@ export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUr
   const { fps } = useVideoConfig();
   const currentTime = frame / fps;
 
-  const currentWord = neon ? undefined : captions.find(
-    (c) => currentTime >= c.start && currentTime <= c.end + 0.1
+  const basicCaptions = useMemo(() => neon ? [] : captions.filter(c =>
+    c && typeof c.word === "string" && c.word.trim() &&
+    Number.isFinite(c.start) && Number.isFinite(c.end) && c.start >= 0 && c.end > c.start
+  ).sort((a, b) => a.start - b.start), [captions, neon]);
+  const currentWordIndex = basicCaptions.findIndex((c, index) =>
+    currentTime >= c.start && currentTime < Math.min(c.end + 0.1, basicCaptions[index + 1]?.start ?? Infinity)
   );
-
-  const prevWord = neon ? undefined : captions.find(
-    (c) => currentTime > c.end + 0.1 && 
-    captions.indexOf(c) === captions.findIndex(cap => currentTime >= cap.start && currentTime <= cap.end + 0.1) - 1
-  );
+  const currentWord = basicCaptions[currentWordIndex];
+  const currentWordEnd = currentWord
+    ? Math.min(currentWord.end + 0.1, basicCaptions[currentWordIndex + 1]?.start ?? Infinity) : 0;
+  const previous = basicCaptions[currentWordIndex - 1];
+  const prevWord = previous && currentTime > previous.end + 0.1 ? previous : undefined;
 
   const isOnBeat = beats.some(
     (beat) => Math.abs(currentTime - beat) < 0.05
@@ -99,7 +103,7 @@ export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUr
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          opacity: captionOpacity(currentTime, currentWord.start, currentWord.end + 0.1),
+          opacity: captionOpacity(currentTime, currentWord.start, currentWordEnd),
         }}>
           <p style={{
             fontFamily: "Montserrat, sans-serif",

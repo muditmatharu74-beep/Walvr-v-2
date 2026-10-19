@@ -71,6 +71,37 @@ test('existing caption choices retain their original Dark Lyrics word treatment'
   }
 });
 
+test('basic captions switch at the next lyric onset instead of holding the previous word for 100ms',()=>{
+  for(const firstEnd of [.5,2]) for(const nextFrame of [15,16,17]){
+    frame=nextFrame;
+    const html=renderToStaticMarkup(React.createElement(DarkLyrics,{
+      captionStyle:'bold-overlay',captions:[{word:'first',start:0,end:firstEnd},
+        {word:'next',start:.5,end:1}],songDuration:4,beats:[],
+    }));
+    const primary=html.match(/<p style="[^"]*font-size:160px[^"]*">([^<]+)<\/p>/);
+    assert.equal(primary?.[1],'NEXT',`next lyric at frame ${nextFrame}, previous end ${firstEnd}`);
+  }
+  frame=33;
+  const gap=renderToStaticMarkup(React.createElement(DarkLyrics,{
+    captionStyle:'bold-overlay',captions:[{word:'first',start:0,end:1},
+      {word:'later',start:2,end:3}],songDuration:4,beats:[],
+  }));
+  assert.ok(!gap.includes('font-size:160px'),'exact tail boundary must clear the caption');
+});
+
+test('basic captions tolerate malformed and unsorted tokens without mutating the original input',()=>{
+  frame=3;
+  const captions=[null,{word:'late',start:2,end:3},{word:null,start:0,end:1},
+    {word:'bad',start:NaN,end:1},{word:'reverse',start:2,end:1},
+    {word:'early',start:0,end:.5}];
+  const before=JSON.stringify(captions);
+  const html=renderToStaticMarkup(React.createElement(DarkLyrics,{
+    captionStyle:'minimal',captions,songDuration:4,beats:[],
+  }));
+  assert.ok(html.includes('>EARLY</p>'));
+  assert.equal(JSON.stringify(captions),before);
+});
+
 test('footage loops muted behind captions while the original song plays once',()=>{
  frame=30;
  const html=renderToStaticMarkup(React.createElement(DarkLyrics,{captionStyle:'clean-neon',
