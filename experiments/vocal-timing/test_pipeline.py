@@ -70,6 +70,30 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(words, [])
         self.assertEqual(rejected, 1)
 
+    def test_rounded_or_clipped_intervals_must_still_have_positive_duration(self):
+        words, rejected = checked_words([
+            {'word': 'too short', 'start': .1001, 'end': .1002},
+            {'word': 'valid', 'start': .2, 'end': .4},
+            {'word': 'past source', 'start': 1.01, 'end': 1.02},
+        ], 10, 11)
+        self.assertEqual([w['word'] for w in words], ['valid'])
+        self.assertEqual(rejected, 2)
+        self.assertIn('rejected_alignment_words',
+                      review_reasons_for(words, rejected, 1, 'vocals', 1))
+        tail, rejected = checked_words([
+            {'word': 'tail', 'start': .99, 'end': 1.00059},
+        ], 0, 1.0006)
+        self.assertEqual(rejected, 0)
+        self.assertEqual(tail[0]['end'], 1.0006, 'Rounding cannot extend past the audio')
+
+    def test_malformed_alignment_entries_are_counted_without_losing_valid_words(self):
+        words, rejected = checked_words([
+            None, 'not a word', [],
+            {'word': 'valid', 'start': 1, 'end': 2},
+        ], 0, 10)
+        self.assertEqual([w['word'] for w in words], ['valid'])
+        self.assertEqual(rejected, 3)
+
 if __name__ == '__main__':
     unittest.main()
 

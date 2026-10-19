@@ -34,6 +34,9 @@ def checked_words(words, offset, duration):
     accepted, rejected = [], 0
     previous = -1.0
     for item in words:
+        if not isinstance(item, dict):
+            rejected += 1
+            continue
         start, end, text = item.get('start'), item.get('end'), item.get('word')
         if (not isinstance(text, str) or not text.strip() or
             isinstance(start, bool) or isinstance(end, bool) or
@@ -42,9 +45,17 @@ def checked_words(words, offset, duration):
             start < 0 or end <= start or end + offset > duration + 0.05 or start < previous):
             rejected += 1
             continue
+        absolute_start = round(start + offset, 3)
+        absolute_end = min(round(end + offset, 3), duration)
+        # Validate the timestamps actually emitted, including millisecond
+        # rounding and clipping at the original audio endpoint. A rejected
+        # word triggers review; never invent a duration to make it renderable.
+        if absolute_end <= absolute_start:
+            rejected += 1
+            continue
         score = item.get('score')
-        accepted.append({'word': text.strip(), 'start': round(start + offset, 3),
-                         'end': round(min(end + offset, duration), 3),
+        accepted.append({'word': text.strip(), 'start': absolute_start,
+                         'end': absolute_end,
                          'alignmentScore': score if isinstance(score, (int, float)) and math.isfinite(score) else None})
         previous = start
     return accepted, rejected
