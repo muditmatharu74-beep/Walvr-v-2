@@ -15,3 +15,11 @@ export function previewNeonBackground(env: Record<string, string | undefined>): 
   }
   return {src: url.href, duration};
 }
+
+export function previewPixelRide(env: Record<string, string | undefined>): boolean {
+  if (env.VERCEL_ENV !== "preview" || env.VERCEL_GIT_COMMIT_REF !== "feature/neon-captions") return false;
+  const style = env.WALVR_NEON_BACKGROUND_STYLE;
+  if (!style) return false;
+  if (style !== "pixel-ride") throw new Error("Invalid preview background style");
+  return true;
+}

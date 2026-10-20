@@ -70,3 +70,26 @@ test('background config is preview-only and rejects incomplete sources',()=>{
   assert.throws(()=>backgrounds.previewNeonBackground({...enabled,...vars}));
  }
 });
+
+test('built-in pixel ride is preview-only and overrides old footage without changing audio or timings',async()=>{
+ const calls=[];
+ const mocks={'./timing':timing,'./neon-background':backgrounds,
+  '@remotion/lambda/client':{renderMediaOnLambda:async args=>{calls.push(args);return {renderId:'job',bucketName:'bucket'}}}};
+ const env={VERCEL_ENV:'preview',VERCEL_GIT_COMMIT_REF:'feature/neon-captions',
+  WALVR_NEON_BACKGROUND_STYLE:'pixel-ride',WALVR_NEON_BACKGROUND_URL:'https://assets.test/old.mp4',
+  WALVR_NEON_BACKGROUND_DURATION:'7.5'};
+ const props={songDuration:190.1,captions:[{word:'hello',start:15,end:16}],beats:[4],audioUrl:'https://audio.test/original.mp3'};
+ await load('src/lib/rendering/remotion.ts',mocks,env).startDarkLyricsRender(props);
+ assert.equal(calls[0].inputProps.backgroundStyle,'pixel-ride');
+ assert.equal(calls[0].inputProps.backgroundVideo,undefined);
+ assert.equal(calls[0].offthreadVideoCacheSizeInBytes,undefined);
+ assert.equal(calls[0].inputProps.audioUrl,props.audioUrl);
+ assert.equal(calls[0].inputProps.captions,props.captions);
+ assert.equal(calls[0].inputProps.songDuration,props.songDuration);
+ assert.equal(props.backgroundStyle,undefined);
+ for(const override of [{VERCEL_ENV:'production'},{VERCEL_GIT_COMMIT_REF:'main'}]) {
+  assert.equal(backgrounds.previewPixelRide({...env,...override}),false);
+ }
+ assert.throws(()=>load('src/lib/rendering/remotion.ts',mocks,{...env,WALVR_NEON_BACKGROUND_STYLE:'unknown'}).assertDarkLyricsConfigured());
+ assert.equal(calls.length,1);
+});

@@ -1,4 +1,5 @@
 import { useCurrentFrame, useVideoConfig, Audio, AbsoluteFill, Loop, OffthreadVideo } from "remotion";
+import { PixelRideScene } from "./PixelRideScene";
 import type { NeonBackground } from "../lib/rendering/neon-background";
 
 import { captionOpacity, isNeonStyle } from "../lib/rendering/neon-captions";
@@ -21,9 +22,10 @@ export type DarkLyricsProps = {
   audioUrl?: string;
   captionStyle?: string;
   backgroundVideo?: NeonBackground;
+  backgroundStyle?: "pixel-ride";
 };
 
-export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUrl, captionStyle, backgroundVideo }) => {
+export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUrl, captionStyle, backgroundVideo, backgroundStyle }) => {
   const neon = isNeonStyle(captionStyle);
   const [fontHandle] = useState(() => neon ? delayRender("Load neon caption font") : null);
   useEffect(() => {
@@ -59,7 +61,8 @@ export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUr
 
   return (
     <AbsoluteFill style={{ backgroundColor: `rgb(${bgBrightness}, ${bgBrightness}, ${bgBrightness})` }}>
-      {backgroundVideo && (
+      {backgroundStyle === "pixel-ride" ? <PixelRideScene time={currentTime} /> : null}
+      {backgroundStyle !== "pixel-ride" && backgroundVideo && (
         <>
           <Loop durationInFrames={Math.max(1, Math.ceil(backgroundVideo.duration * fps))}>
             <OffthreadVideo src={backgroundVideo.src} muted style={{width: "100%", height: "100%", objectFit: "cover"}} />

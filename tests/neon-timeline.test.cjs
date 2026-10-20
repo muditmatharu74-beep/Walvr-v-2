@@ -16,6 +16,7 @@ const helpers = load('src/lib/rendering/neon-captions.ts');
 const timing = load('src/lib/rendering/timing.ts');
 const {NeonCaptionOverlay} = load('src/components/NeonCaptionOverlay.tsx',
   name=>name.includes('neon-captions')?helpers:require(name));
+const {PixelRideScene} = load('src/remotion/PixelRideScene.tsx');
 let frame=0;
 const {DarkLyrics} = load('src/remotion/DarkLyrics.tsx',name=>{
   if(name==='remotion') return {
@@ -27,6 +28,7 @@ const {DarkLyrics} = load('src/remotion/DarkLyrics.tsx',name=>{
   };
   if(name.includes('@fontsource/')) return {};
   if(name.includes('neon-captions')) return helpers;
+  if(name.includes('PixelRideScene')) return {PixelRideScene};
   if(name.includes('NeonCaptionOverlay')) return {NeonCaptionOverlay};
   return require(name);
 });
@@ -113,4 +115,27 @@ test('footage loops muted behind captions while the original song plays once',()
  assert.equal((html.match(/<audio/g)||[]).length,1);
  assert.ok(html.indexOf('<video')<html.indexOf('data-active='));
  assert.ok(html.includes('https://audio.test/original.mp3'));
+});
+
+test('original pixel ride moves deterministically and repeats exactly every twelve seconds',()=>{
+  const scene=time=>renderToStaticMarkup(React.createElement(PixelRideScene,{time}));
+  for(const time of [0,.5,3,7.2]) {
+    assert.equal(scene(time),scene(time+12),'Loop changed at '+time);
+    assert.equal(scene(time),scene(time),'Seeking must be deterministic');
+  }
+  assert.notEqual(scene(0),scene(3),'Background is static');
+  assert.ok(scene(0).includes('data-rider="true"'));
+  assert.ok(!scene(0).includes('<image'),'Artwork must not fetch external imagery');
+});
+test('pixel ride renders below lyrics and keeps the original song once without decoding stock footage',()=>{
+  frame=30;
+  const html=renderToStaticMarkup(React.createElement(DarkLyrics,{captionStyle:'pixel-neon',
+    captions:[{word:'home',start:0,end:2}],songDuration:190.1,beats:[],audioUrl:'https://audio.test/original.mp3',
+    backgroundStyle:'pixel-ride',backgroundVideo:{src:'https://assets.test/old.mp4',duration:7.5}}));
+  assert.ok(html.includes('data-pixel-ride="true"'));
+  assert.ok(html.indexOf('data-pixel-ride')<html.indexOf('data-active='));
+  assert.ok(html.includes('HOME'));
+  assert.equal((html.match(/<audio/g)||[]).length,1);
+  assert.ok(html.includes('https://audio.test/original.mp3'));
+  assert.ok(!html.includes('<video'));
 });

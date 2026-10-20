@@ -86,6 +86,37 @@ const edgeCaptions = require('./neon-edge-fixtures.cjs');
   assert.ok(energy(880)<energy(220)*0.05,'Background video audio leaked into the song');
   report.background={duration:4,sourceDuration:1,loopFrameDifference:diff/first.length,muted:true};
   console.log('PASS background: looping video, full song duration, original audio retained, footage audio muted');
+  // Encode our original code-drawn background, including one full loop seam.
+  const rideProps={backgroundStyle:'pixel-ride',captionStyle:'pixel-neon',songDuration:13,beats:[],captions:[]};
+  const rideComposition=await selectComposition({serveUrl,id:'DarkLyrics',inputProps:rideProps,browserExecutable:browser.path});
+  const rideFile=path.join(output,'walvr-original-pixel-ride.mp4');
+  await renderMedia({serveUrl,composition:rideComposition,inputProps:rideProps,browserExecutable:browser.path,
+    outputLocation:rideFile,codec:'h264',concurrency:2});
+  const rideProbe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-show_format','-of','json',rideFile],{encoding:'utf8'}));
+  assert.equal(rideProbe.streams.find(s=>s.codec_type==='video').width,1080);
+  assert.equal(rideProbe.streams.find(s=>s.codec_type==='video').height,1920);
+  assert.ok(Math.abs(Number(rideProbe.format.duration)-13)<.1);
+  assert.ok(!rideProbe.streams.some(s=>s.codec_type==='audio'),'Background sample must be silent');
+  const rideFrame=time=>execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-ss',String(time),'-i',rideFile,
+    '-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1'],{maxBuffer:10*1024*1024});
+  const rideFirst=rideFrame(.4),rideLoop=rideFrame(12.4),rideMoving=rideFrame(3.4);
+  let seam=0,motion=0;
+  for(let i=0;i<rideFirst.length;i++){seam+=Math.abs(rideFirst[i]-rideLoop[i]);motion+=Math.abs(rideFirst[i]-rideMoving[i]);}
+  assert.ok(seam/rideFirst.length<3,'Original ride does not repeat at twelve seconds');
+  assert.ok(motion/rideFirst.length>.5,'Original ride is not visibly animated');
+  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-ss','2','-i',rideFile,'-frames:v','1',path.join(output,'walvr-original-pixel-ride.png')]);
+  const rideCaptionProps={...rideProps,songDuration:4,audioUrl:'/public/tone.wav',
+    captions:['Late','night','ride','home'].map((word,i)=>({word,start:i*.8,end:(i+1)*.8}))};
+  const rideCaptionComposition=await selectComposition({serveUrl,id:'DarkLyrics',inputProps:rideCaptionProps,browserExecutable:browser.path});
+  const rideCaptionFile=path.join(output,'walvr-original-pixel-ride-captions.mp4');
+  await renderMedia({serveUrl,composition:rideCaptionComposition,inputProps:rideCaptionProps,browserExecutable:browser.path,
+    outputLocation:rideCaptionFile,codec:'h264',audioCodec:'aac',concurrency:2});
+  const rideText=execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-ss','1.2','-i',rideCaptionFile,
+    '-frames:v','1','-vf','crop=1080:300:0:1170','-f','rawvideo','-pix_fmt','rgb24','pipe:1'],{maxBuffer:2*1024*1024});
+  let rideCyan=0;for(let i=0;i<rideText.length;i+=3)if(rideText[i]<150&&rideText[i+1]>170&&rideText[i+2]>170)rideCyan++;
+  assert.ok(rideCyan>100,'Captions are missing over the original background');
+  report.pixelRide={duration:13,loopSeconds:12,seamDifference:seam/rideFirst.length,motionDifference:motion/rideFirst.length,captionCyanPixels:rideCyan};
+  console.log('PASS original pixel ride: 1080x1920 silent MP4, visible motion, twelve-second loop and readable caption export');
   fs.writeFileSync(path.join(output,'verification.json'),JSON.stringify(report,null,2));
   fs.rmSync(fixture,{recursive:true,force:true});
   console.log('Exports: '+output);
