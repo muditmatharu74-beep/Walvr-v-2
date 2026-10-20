@@ -70,3 +70,12 @@ test('lost review submission and tracking writes never refund or submit twice',a
   assert.equal(s.submissions.length,1);assert.equal(s.rpc.length,1);
  }
 });
+
+test('saved zero-duration entries remain unchanged and are explicitly marked for listening review',async()=>{
+ const captions=[{word:'hello',start:1,end:2},{word:'untimed',start:3,end:3}];
+ const s=setup({source:{captions}});await run(env,args,s.deps);
+ assert.deepEqual(s.submissions[0].captions,captions);
+ assert.equal(s.getVideo().analysis.review_render.zero_duration_captions,1);
+ assert.equal(s.getVideo().analysis.review_render.human_verified,false);
+ assert.equal(s.getVideo().analysis.review_render.timing_review_required,true);
+});

@@ -49,8 +49,12 @@ async function run(env,args,deps={}) {
     throw Error('Saved video does not match the original upload');
   const words=source.captions;
   if(!Array.isArray(words)||!words.length||words.some(w=>!w||typeof w.word!=='string'||!w.word.trim()||
-    !Number.isFinite(w.start)||!Number.isFinite(w.end)||w.start<0||w.end<=w.start||w.end>duration))
+    !Number.isFinite(w.start)||!Number.isFinite(w.end)||w.start<0||w.end<w.start||w.end>duration))
     throw Error('Saved captions do not fit the verified original audio');
+  if(!words.some(w=>w.end>w.start)) throw Error('Saved captions have no visible intervals');
+  // Keep saved clocks unchanged. Existing layout skips zero-duration entries;
+  // record them explicitly for this listening review rather than invent timing.
+  const zeroDuration=words.filter(w=>w.end===w.start).length;
   load('src/lib/rendering/transcription-quality.ts').assertUsableTranscription({words},true);
   const objects=check(await db.storage.from('uploads').list(owner,{search:filename}));
   if(!objects.some(o=>o.name===filename)) throw Error('Owned audio not found');
@@ -61,7 +65,8 @@ async function run(env,args,deps={}) {
     video=check(await db.from('videos').insert({id:retryId,user_id:owner,
       title:source.title,artist:source.artist,cap_style:style,clip_style:'dark-solid',template:source.template,
       status:'pending',captions:words,analysis:{review_render:{source_video_id:sourceId,
-        source_sha256:sha256,duration,background:'pixel-ride'}}}).select().single());
+        source_sha256:sha256,duration,background:'pixel-ride',human_verified:false,
+        timing_review_required:true,zero_duration_captions:zeroDuration}}}).select().single());
   }
   const identity=video.analysis?.review_render;
   if(video.cap_style!==style||video.template!==source.template||identity?.source_video_id!==sourceId||
