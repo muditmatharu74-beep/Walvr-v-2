@@ -161,7 +161,7 @@ test('submission rejects another owner and already-submitted videos before paid 
   assert.equal(running.providerCalls.length, 0);
 });
 
-function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false, submissionFails=false, rendererConfigured=true, vocalTiming=false, captionStyle='bold-overlay', backgroundType='dark-solid', plan='free', duration=10, words=[{word:'hello',start:0,end:1}], clips=[], analysis={mood:'dark',energy:'low'} }={}) {
+function submission({ reservation='reserved', transcriptionFails=false, trackingFails=false, submissionFails=false, rendererConfigured=true, vocalTiming=false, captionStyle='bold-overlay', backgroundType='dark-solid', plan='free', duration=10, words=[{word:'hello',start:0,end:1}], clips=[], analysis={mood:'dark',energy:'low'}, directorContent }={}) {
   const state=setup(); const rpc=[]; const renders=[];
   const db={
     async rpc(name,args){rpc.push({name,args});return {data:name==='reserve_video_credits'?{status:reservation,credits:400}:{status:'error'},error:null}},
@@ -175,7 +175,7 @@ function submission({ reservation='reserved', transcriptionFails=false, tracking
   state.mocks['@/lib/rendering/vocal-jobs']={vocalJobsEnabled:()=>vocalTiming,assertVocalWorkerConfigured(){},enqueueVocalJob:async(_db,input)=>{
     rpc.push({name:'enqueue_vocal_job',args:input}); return {status:reservation,credits:400};
   }};
-  state.mocks['@anthropic-ai/sdk']=class{constructor(){this.messages={create:async()=>({content:[{type:'text',text:JSON.stringify(analysis)}]})}}};
+  state.mocks['@anthropic-ai/sdk']=class{constructor(){this.messages={create:async()=>({content:directorContent ?? [{type:'text',text:JSON.stringify(analysis)}]})}}};
   state.mocks['@/lib/rendering/remotion']={assertDarkLyricsConfigured:()=>{if(!rendererConfigured)throw Error('Missing render configuration')},startDarkLyricsRender:async(props)=>{renders.push(props);if(submissionFails)throw Error('submission response lost');return {id:'job',bucketName:'bucket',functionName:'function',region:'us-east-1'}}};
   state.mocks.fetch=async(url,options)=>{
     if(String(url).includes('creatomate.com')){renders.push(JSON.parse(options.body).source);return Response.json([{id:'job'}])}
@@ -298,3 +298,39 @@ for (const captionStyle of ['clean-neon', 'pixel-neon']) {
     assert.equal(text[0].text,captionStyle==='pixel-neon'?'HELLO':'hello');
   });
 }
+
+test('malformed director JSON values cannot break section lookup or background pacing', async () => {
+  const invalid = [null, [], 'not an object',
+    {mood:'chill', sections:'verse'},
+    {sections:[null]},
+    {sections:[{type:'verse',startTime:3,endTime:1}]},
+    {cutInterval:'oops',verseInterval:[],chorusInterval:{},dropInterval:-2},
+  ];
+  for (const analysis of invalid) for (const backgroundType of ['dark-solid','color-block']) {
+    const s=submission({analysis,backgroundType});
+    assert.equal((await s.run()).status,200,JSON.stringify(analysis));
+    assert.equal(s.renders.length,1);
+    assert.equal(s.rpc.length,1,'valid defaults should not trigger a refund or another reservation');
+    if(backgroundType==='dark-solid') {
+      assert.equal(JSON.stringify(s.renders[0].beats),'[0,4,8]');
+    } else {
+      const backgrounds=s.renders[0].elements.filter(e=>e.name.startsWith('bg-'));
+      assert.deepEqual(backgrounds.map(e=>e.time),[0,4,8]);
+      assert.ok(backgrounds.every(e=>e.duration>0&&e.time+e.duration<=10));
+    }
+  }
+});
+test('validated director sections and intervals preserve intended background pacing', async () => {
+  const s=submission({analysis:{mood:'chill',cutInterval:2,verseInterval:1,
+    sections:[{type:'verse',startTime:0,endTime:3}]}});
+  assert.equal((await s.run()).status,200);
+  assert.equal(JSON.stringify(s.renders[0].beats),'[0,1,2,3,5,7,9]');
+});
+
+test('empty or non-text director responses use safe pacing defaults', async () => {
+  for (const directorContent of [[],[{type:'thinking',thinking:'analysis'}]]) {
+    const s=submission({directorContent});
+    assert.equal((await s.run()).status,200);
+    assert.equal(JSON.stringify(s.renders[0].beats),'[0,4,8]');
+  }
+});

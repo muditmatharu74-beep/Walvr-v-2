@@ -18,6 +18,27 @@ const requestSchema = z.object({
   captionStyle: z.enum(CAPTION_STYLE_IDS),
 });
 
+// Model output is untrusted even when it is syntactically valid JSON.
+// Keep background pacing finite and section lookups safe before any submission.
+const analysisSchema = z.object({
+  mood: z.enum(["energetic", "dark", "sad", "romantic", "aggressive", "chill", "uplifting"]).catch("dark"),
+  energy: z.enum(["high", "medium", "low"]).catch("medium"),
+  genre: z.string().max(100).catch("unknown"),
+  themes: z.array(z.string().max(100)).max(20).catch([]),
+  clipStyle: z.enum(["fast-cuts", "slow-cinematic", "mixed"]).catch("mixed"),
+  colorGrade: z.enum(["warm", "cold", "dark", "vibrant", "monochrome"]).catch("dark"),
+  cutInterval: z.number().finite().min(0.5).max(600).catch(4),
+  verseInterval: z.number().finite().min(0.5).max(600).catch(5),
+  chorusInterval: z.number().finite().min(0.5).max(600).catch(2),
+  dropInterval: z.number().finite().min(0.5).max(600).catch(1),
+  sections: z.array(z.object({
+    type: z.enum(["verse", "chorus", "drop", "bridge"]),
+    startTime: z.number().finite().min(0).max(600),
+    endTime: z.number().finite().min(0).max(600),
+  }).refine(section => section.endTime > section.startTime)).max(100).catch([]),
+  notes: z.string().max(2000).catch(""),
+});
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
@@ -287,24 +308,12 @@ Return exactly:
     ],
   });
 
-  const text = message.content[0].type === "text" ? message.content[0].text : "{}";
+  const textBlock = message.content.find(block => block.type === "text");
+  const text = textBlock?.type === "text" ? textBlock.text : "{}";
   try {
-    return JSON.parse(text);
+    return analysisSchema.parse(JSON.parse(text));
   } catch {
-    return {
-      mood: "dark",
-      energy: "medium",
-      genre: "unknown",
-      themes: [],
-      clipStyle: "mixed",
-      colorGrade: "dark",
-      cutInterval: 4,
-      verseInterval: 5,
-      chorusInterval: 2,
-      dropInterval: 1,
-      sections: [],
-      notes: "",
-    };
+    return analysisSchema.parse({});
   }
 }
 
