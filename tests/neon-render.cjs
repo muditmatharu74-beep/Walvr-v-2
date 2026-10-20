@@ -90,8 +90,19 @@ const edgeCaptions = require('./neon-edge-fixtures.cjs');
   const rideProps={backgroundStyle:'pixel-ride',captionStyle:'pixel-neon',songDuration:13,beats:[],captions:[]};
   const rideComposition=await selectComposition({serveUrl,id:'DarkLyrics',inputProps:rideProps,browserExecutable:browser.path});
   const rideFile=path.join(output,'walvr-original-pixel-ride.mp4');
+  const rideDraft=path.join(output,'pixel-ride-intermediate.mp4');
   await renderMedia({serveUrl,composition:rideComposition,inputProps:rideProps,browserExecutable:browser.path,
-    outputLocation:rideFile,codec:'h264',concurrency:2});
+    outputLocation:rideDraft,codec:'h264',concurrency:2});
+  const draftProbe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-of','json',rideDraft],{encoding:'utf8'}));
+  if(draftProbe.streams.some(s=>s.codec_type==='audio')) {
+    // Remotion can emit a silent AAC track even with no Audio element.
+    // Verify actual silence before removing it from the standalone background.
+    const silence=execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-i',rideDraft,'-vn','-ac','1','-ar','8000','-f','f32le','pipe:1'],{maxBuffer:1024*1024});
+    let peak=0;for(let i=0;i<silence.length;i+=4)peak=Math.max(peak,Math.abs(silence.readFloatLE(i)));
+    assert.ok(peak<.0001,'Unexpected audio in the original background sample');
+    execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-i',rideDraft,'-map','0:v:0','-c:v','copy','-an',rideFile]);
+    fs.unlinkSync(rideDraft);
+  } else fs.renameSync(rideDraft,rideFile);
   const rideProbe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-show_format','-of','json',rideFile],{encoding:'utf8'}));
   assert.equal(rideProbe.streams.find(s=>s.codec_type==='video').width,1080);
   assert.equal(rideProbe.streams.find(s=>s.codec_type==='video').height,1920);
