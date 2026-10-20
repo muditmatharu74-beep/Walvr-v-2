@@ -9,7 +9,7 @@ export default function CaptionPreviewPage() {
       <p style={{ color: "#a8bdce", marginBottom: 24 }}>Same words and timing. Choose smooth lettering or a retro game feel.</p>
       <PixelRidePreview />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,260px),1fr))", gap: 24 }}>
-        {(["clean-neon", "pixel-neon"] as const).map(style => <section key={style}>
+        {(["clean-neon", "pixel-neon"] as const).map(style => <section key={style} data-caption-demo>
           <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>{style === "clean-neon" ? "Clean Neon" : "Pixel Neon"}</h2>
           <NeonCaptionPreview style={style} large />
         </section>)}

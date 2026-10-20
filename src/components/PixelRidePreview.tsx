@@ -49,7 +49,7 @@ export function PixelRidePreview() {
       </button>
       <label style={{display:"flex",alignItems:"center",gap:8,color:"#a8bdce"}}>
         Caption style
-        <select value={style} onChange={e=>setStyle(e.target.value as NeonStyle)}
+        <select aria-label="Caption style" value={style} onChange={e=>setStyle(e.target.value as NeonStyle)}
           style={{...buttonStyle,padding:"10px"}}>
           <option value="pixel-neon">Pixel Neon</option>
           <option value="clean-neon">Clean Neon</option>
