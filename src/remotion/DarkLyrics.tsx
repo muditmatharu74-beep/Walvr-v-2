@@ -71,11 +71,6 @@ export const DarkLyrics: React.FC<DarkLyricsProps> = ({ captions, beats, audioUr
         </>
       )}
       
-      {/* Wine red vignette */}
-      <AbsoluteFill style={{
-        background: "radial-gradient(ellipse at center, transparent 35%, rgba(80,0,15,0.6) 100%)",
-      }} />
-
       {/* Previous word — faded */}
       {!neon && prevWord && (
         <AbsoluteFill style={{
