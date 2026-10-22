@@ -10,7 +10,9 @@ ENV PYTHONUNBUFFERED=1 \
     OMP_NUM_THREADS=2 \
     TMPDIR=/tmp/walvr
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Debian package hooks and pip already use TMPDIR during installation.
+RUN mkdir -p /tmp/walvr && chmod 700 /tmp/walvr \
+    && apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsndfile1 ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY experiments/vocal-timing/requirements-cpu.txt /app/requirements-cpu.txt
