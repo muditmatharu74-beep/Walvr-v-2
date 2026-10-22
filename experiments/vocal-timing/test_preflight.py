@@ -10,6 +10,39 @@ import worker
 
 
 class ReadinessTests(unittest.TestCase):
+    def test_configuration_only_check_never_loads_models_claims_or_prints_secrets(self):
+        env = {'WALVR_APP_URL': 'https://private-app.test',
+               'WALVR_STORAGE_ORIGIN': 'https://private-storage.test',
+               'WALVR_VOCAL_WORKER_SECRET': 'private-worker-secret' * 2,
+               'WALVR_PREVIEW_BYPASS_TOKEN': 'private-bypass-token'}
+        output = io.StringIO()
+        with patch.dict(os.environ, env, clear=True), \
+                patch('sys.argv', ['worker.py', '--check-config']), \
+                patch('worker.prepare_models') as warm, patch('worker.run_once') as claim, \
+                contextlib.redirect_stdout(output):
+            worker.main()
+        warm.assert_not_called()
+        claim.assert_not_called()
+        self.assertIn('"configurationValid": true', output.getvalue())
+        self.assertIn('"runtimeChecked": false', output.getvalue())
+        self.assertIn('"modelsWarmed": false', output.getvalue())
+        for private_value in env.values():
+            self.assertNotIn(private_value, output.getvalue())
+
+    def test_configuration_only_check_rejects_bad_origins_before_any_queue_call(self):
+        env = {'WALVR_APP_URL': 'https://app.test/wrong-path',
+               'WALVR_STORAGE_ORIGIN': 'https://storage.test',
+               'WALVR_VOCAL_WORKER_SECRET': 'private-worker-secret' * 2}
+        with patch.dict(os.environ, env, clear=True), \
+                patch('sys.argv', ['worker.py', '--check-config']), \
+                patch('worker.prepare_models') as warm, patch('worker.run_once') as claim, \
+                contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit) as result:
+                worker.main()
+        self.assertEqual(result.exception.code, 1)
+        warm.assert_not_called()
+        claim.assert_not_called()
+
     def test_bad_or_missing_configuration_exits_before_model_loading_or_claims(self):
         base = {'WALVR_APP_URL': 'https://app.test', 'WALVR_STORAGE_ORIGIN': 'https://storage.test',
                 'WALVR_VOCAL_WORKER_SECRET': 'private-worker-secret' * 2}

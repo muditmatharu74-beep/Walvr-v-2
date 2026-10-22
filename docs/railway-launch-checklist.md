@@ -16,7 +16,7 @@ Do not merge draft PRs or change production as part of this rehearsal.
   19.2.9 and compatible theme/types packages. Next's nested PostCSS is overridden
   to patched 8.5.31. The installed production dependency audit reports zero known
   vulnerabilities. This does not certify the whole app or replace live Auth checks.
-- Local regression checks: 115 Node tests and 33 Python tests pass. Container model
+- Local regression checks: 115 Node tests and 35 Python tests pass. Container model
   imports, cache permissions and actual model warm-up are separate CI gates.
 - PRs #3, #4, #5 and #7 remain draft and unmerged. Their earlier descriptions may
   predate subsequent tests; use current CI and this rehearsal's evidence.
@@ -96,6 +96,15 @@ settings. Its startup warms models before it claims jobs, but a readiness log al
 does not prove app authentication, queue access or successful audio processing.
 
 ## First acceptance run
+
+Before starting the supervised worker, run `python worker.py --check-config` in
+its service environment (working directory /app/experiments/vocal-timing).
+It validates the private HTTPS origins and worker-secret length, prints no values,
+does not download models, and never calls the queue. A successful result has
+configurationValid=true, runtimeChecked=false and modelsWarmed=false. This checks
+configuration syntax only; it does not prove app reachability, matching secrets,
+database isolation or a valid deployment bypass. Then use the normal entrypoint
+for actual model/runtime readiness and the live acceptance run below.
 
 1. Require all current CI checks to pass, including native container imports,
    non-root cache checks and actual CPU model downloads/loads. A later commit

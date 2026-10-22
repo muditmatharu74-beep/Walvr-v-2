@@ -27,6 +27,13 @@ jobs:
           print('CPU recognition and alignment imports passed')"
       - name: Test worker and timing guards offline
         run: docker run --rm --network none --entrypoint python walvr-vocal-worker:test -m unittest discover -s /app/experiments/vocal-timing -p 'test_*.py'
+      - name: Check connection configuration without network access or model loading
+        run: >-
+          docker run --rm --network none
+          -e WALVR_APP_URL=https://app.example.test
+          -e WALVR_STORAGE_ORIGIN=https://storage.example.test
+          -e WALVR_VOCAL_WORKER_SECRET=configuration-check-only-not-a-credential
+          walvr-vocal-worker:test --check-config
       - name: Check actual worker readiness as the unprivileged container user
         run: docker run --rm --network none --entrypoint python walvr-vocal-worker:test preflight.py
       - name: Warm actual CPU models without customer audio or service credentials

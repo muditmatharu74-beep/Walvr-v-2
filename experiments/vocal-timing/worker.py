@@ -204,12 +204,18 @@ def prepare_models(asr_model, language):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--once', action='store_true')
+    parser.add_argument('--check-config', action='store_true',
+                        help='Validate private connection settings without downloads or queue calls')
     args = parser.parse_args()
     # Check runtime and models in a bounded child before claiming any job.
     # A native crash is then reported as startup failure, not a worker crash.
     try:
         client = Client(os.environ['WALVR_APP_URL'], os.environ['WALVR_VOCAL_WORKER_SECRET'],
                         os.environ['WALVR_STORAGE_ORIGIN'], os.environ.get('WALVR_PREVIEW_BYPASS_TOKEN'))
+        if args.check_config:
+            print(json.dumps({'worker': 'vocal-timing', 'configurationValid': True,
+                              'runtimeChecked': False, 'modelsWarmed': False}), flush=True)
+            return
         readiness = prepare_models(os.environ.get('WALVR_ASR_MODEL', 'small'),
                                    os.environ.get('WALVR_WARM_LANGUAGE', 'en'))
         print(json.dumps({'worker': 'vocal-timing', 'readiness': readiness}), flush=True)
