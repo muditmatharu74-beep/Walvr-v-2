@@ -1,0 +1,30 @@
+name: Neon caption previews
+on:
+  pull_request:
+    paths:
+      - 'src/components/NeonCaption*.tsx'
+      - 'src/lib/rendering/neon-captions.ts'
+      - 'src/app/caption-preview/**'
+      - 'src/app/(dashboard)/upload/**'
+      - 'src/remotion/**'
+      - 'tests/neon-*.cjs'
+      - 'package*.json'
+      - '.github/workflows/neon-captions.yml'
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - run: npm install --prefix "$RUNNER_TEMP/neon-browser" --no-audit --no-fund playwright@1.55.1
+      - run: node "$RUNNER_TEMP/neon-browser/node_modules/playwright/cli.js" install --with-deps chromium
+      - run: node tests/neon-browser.cjs
+        env:
+          NODE_PATH: ${{ runner.temp }}/neon-browser/node_modules
+          NEXT_TELEMETRY_DISABLED: '1'
