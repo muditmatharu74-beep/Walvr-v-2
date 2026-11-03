@@ -32,6 +32,12 @@ jobs:
       - run: node tests/billing-migration.cjs
         env:
           NODE_PATH: ${{ runner.temp }}/walvr-test/node_modules
+      - run: node tests/signup-security.cjs
+        env:
+          NODE_PATH: ${{ runner.temp }}/walvr-test/node_modules
+      - run: node tests/security-migration.cjs
+        env:
+          NODE_PATH: ${{ runner.temp }}/walvr-test/node_modules
       - run: node tests/billing-concurrency.cjs
         env:
           NODE_PATH: ${{ runner.temp }}/walvr-test/node_modules

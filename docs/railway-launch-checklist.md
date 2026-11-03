@@ -1,7 +1,8 @@
-# Railway rehearsal and October launch gates
+# Railway rehearsal and launch gates
 
-Status checked 2026-10-22. This is a deployment checklist, not an activation record.
-The target is a limited beta by October 31, conditional on the checks below.
+Prepared October 22; signup-security instructions updated November 3, 2026.
+This is a deployment checklist, not an activation record. Choose a new limited-beta
+date after the hosted acceptance checks pass; the original October 31 target has passed.
 Do not merge draft PRs or change production as part of this rehearsal.
 
 ## Verified starting point
@@ -14,7 +15,7 @@ Do not merge draft PRs or change production as part of this rehearsal.
   including native imports, non-root readiness and real model warm-up.
 - The app has been upgraded from Next.js 14.2.5 to 15.5.28 with React/React DOM
   19.2.9 and compatible theme/types packages. Next's nested PostCSS is overridden
-  to patched 8.5.31. The installed production dependency audit reports zero known
+  to patched 8.5.31. The October 29 production dependency audit reported zero known
   vulnerabilities. This does not certify the whole app or replace live Auth checks.
 - Local regression checks: 115 Node tests and 35 Python tests pass. Container model
   imports, cache permissions and actual model warm-up are separate CI gates.
@@ -24,9 +25,10 @@ Do not merge draft PRs or change production as part of this rehearsal.
   history lists render tracking and render-credit refunds, not the vocal queue.
   A catalog check found reserve_video_credits but no enqueue_vocal_job or
   claim_vocal_analysis. Do not infer the complete schema from migration names.
-- Railway's status page reported a platform outage on October 22, including
-  unavailable Hobby builds. Recheck https://status.railway.com before paying or
-  deploying; do not repeatedly enqueue the same deployment during the incident.
+- The November 3 read-only security audit still flags the signup helper's search
+  path and browser EXECUTE privileges. A tested, body-preserving migration is
+  prepared in docs/signup-security-rollout.md; it is not applied to the hosted project.
+- Recheck https://status.railway.com at deployment time for current service availability.
 
 ## Connection and budget
 
@@ -45,9 +47,10 @@ References: https://docs.railway.com/pricing/cost-control and https://railway.co
    and credentials. Confirm the project reference differs from production. Branches
    may add cost; review it before provisioning. Never use production to bypass this gate.
 2. Compare the isolated schema with the ordered repository migrations. Apply missing
-   tracking, atomic billing, render recovery and vocal-job migrations to that isolated
+   tracking, atomic billing, render recovery, vocal-job and signup-hardening migrations to that isolated
    database. Reconcile previously applied tracking/refund equivalents rather than
-   replaying migrations blindly. See docs/vocal-worker-rollout.md for the queue migration.
+   replaying migrations blindly. See docs/vocal-worker-rollout.md for the queue migration
+   and docs/signup-security-rollout.md for preserving the current signup credit allowance.
 3. Bind a feature-branch Vercel preview to that same database: public URL/key and
    server-only service-role key must all belong to it. Configure preview Auth URLs,
    templates and Storage policies. Create a disposable tester and explicit test credits.
@@ -145,20 +148,20 @@ blocks worker APIs. Preserve reservations for uncertain provider submissions unt
 the provider state is reconciled. Do not roll back to old balance-writing code
 after atomic billing is active. Rollback must preserve the ledger and job records.
 
-Proposed dates (America/New_York), subject to passing evidence:
+Release sequence, with dates set after the first hosted acceptance run:
 
-| Date | Required outcome |
+| Gate | Required outcome |
 | --- | --- |
-| October 22 | Fix container packaging, finish CI, connect account/budget, provision isolated test setup when providers permit |
-| October 23–24 | First live worker-to-MP4 run; browser-closed, restart, duplicate and failure checks |
-| October 25–27 | Full-song listening and timing scores; measure cost/latency; fix failed cases |
-| October 28–29 | Small invited beta; Auth/Storage security, dependency advisories and Stripe test-mode checks resolved |
-| October 30 | Release decision, operational checklist, rollback rehearsal and support readiness |
-| October 31 | Limited launch only if gates pass; keep paid access closed if billing/recovery or security remains unverified |
+| Hosting | Passing CI, connected account/budget and isolated test database |
+| Hosted acceptance | Worker-to-MP4 run; browser-closed, restart, duplicate, refund and two-account checks |
+| Accuracy and cost | Full-song listening/timing scores, measured latency/cost, failed cases resolved |
+| Invited beta | Auth/Storage security, dependency advisories and Stripe test-mode checks resolved |
+| Release decision | Operational checklist, rollback rehearsal and support readiness |
+| Limited launch | All gates pass; keep paid access closed if billing/recovery or security remains unverified |
 
 Launch also requires reviewing current production dependency advisories, signup/Auth
 advisor findings, clear purchased-credit renewal policy, Stripe webhook retry tests,
 and the production migration/application cutover. Railway does not resolve these.
 Production vocal timing is currently blocked by a preview-only code gate; that
 needs its own reviewed rollout after the live rehearsal, not merely an env toggle.
-This schedule is a target, not a guarantee of perfect lyrics or outage-free hosting.
+Completing code checks alone does not establish lyric accuracy or hosted readiness.
