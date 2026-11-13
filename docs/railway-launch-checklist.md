@@ -135,6 +135,34 @@ for actual model/runtime readiness and the live acceptance run below.
 Keep aggregate evidence (job IDs, statuses, charge/refund counts and timings).
 Do not commit customer audio, lyric transcripts or credentials.
 
+## Two-account acceptance
+
+The real PostgreSQL concurrency suite now exercises two disposable customer
+accounts with separate balances and uploads. It holds one customer's reservation
+transaction open while the other enqueues, then claims their jobs from two worker
+connections. It rejects crossed lease tokens, fails/refunds one job once, completes
+the other once, and checks owner-scoped database reads of profiles, captions and
+download URLs. The renderer and media are synthetic; this is not hosted acceptance
+or a test of Storage access, real authentication, provider output or lyric accuracy.
+
+Repeat the following on the isolated hosted preview before inviting customers:
+
+1. Open separate browser sessions for two disposable accounts. Record their initial
+   balances and upload a separate file through each account's normal upload flow.
+2. Submit both jobs and repeat Create rapidly. Require one charge and one queue
+   entry per job, with each job bound to its uploader and original source hash.
+3. Make one controlled input fail while the other completes. Require one refund
+   only for the failed job, one final render for the successful job, and unchanged
+   credits for the other account at each transition.
+4. Check both dashboards, owner APIs, captions and download access. Attempt to
+   request the other account's video ID. Verify Storage's actual access policy
+   separately; passing database RLS checks does not establish private object URLs.
+5. Close both browsers and repeat with an interrupted worker. Confirm lease
+   recovery, correct results and no duplicate charges, refunds or render submissions.
+
+Keep the initial Railway service at one worker. The two-worker database rehearsal
+checks concurrent claims without requiring a second paid hosted replica.
+
 ## Operating and launch gates
 
 Before beta, name the person checking worker restarts, queue age, failed jobs,
