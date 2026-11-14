@@ -4,11 +4,11 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const ts=require('typescript');
 const path=require('node:path');
-function setup(replies, profiles=[]){
+function setup(replies, profiles=[], deletion={data:[]}, approved=true){
  const state=[]; const callbacks=[]; let index=0;
  const mod={exports:{}};
  const jsx=(type,props)=>({type,props});
- const supabase={from:()=>({select:()=>({eq:()=>({single:async()=>{const r=profiles.shift();if(r instanceof Error)throw r;return r},order:async()=>{
+ const supabase={from:()=>({delete:()=>({eq:()=>({select:async()=>{if(deletion instanceof Error)throw deletion;return deletion}})}),select:()=>({eq:()=>({single:async()=>{const r=profiles.shift();if(r instanceof Error)throw r;return r},order:async()=>{
    const reply=replies.shift();if(reply instanceof Error)throw reply;return reply;
  }})})})};
  const mocks={
@@ -22,7 +22,7 @@ function setup(replies, profiles=[]){
  };
  const source=ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src/app/(dashboard)/dashboard/page.tsx'),'utf8'),
   {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
- vm.runInNewContext(source,{module:mod,exports:mod.exports,require:id=>mocks[id]});
+ vm.runInNewContext(source,{module:mod,exports:mod.exports,require:id=>mocks[id],confirm:()=>approved});
  function render(){index=0;return mod.exports.default()}
  render();
  return{state,load:callbacks[0],loadProfile:callbacks[1],render};
@@ -64,4 +64,26 @@ test('an unavailable initial balance is unknown, while a confirmed zero remains 
  assert.equal(s.state[1],null);
  assert.match(JSON.stringify(s.render()),/Could not refresh your credit balance/);
  await s.loadProfile('owner');assert.equal(s.state[1].credits,0);assert.equal(s.state[5],'');
+});
+
+function findDelete(node){
+ if(!node || typeof node!=='object')return;
+ if(node.type==='button' && node.props.children==='Delete')return node;
+ for(const child of [node.props?.children].flat(Infinity)){const found=findDelete(child);if(found)return found}
+}
+test('a rejected, unmatched, or interrupted delete preserves the video with an error',async()=>{
+ for(const deletion of [{data:null,error:{message:'denied'}},{data:[]},new Error('lost response')]){
+  const s=setup([{data:[{id:'v',status:'done',render_url:'https://media.test/v.mp4'}]}],[],deletion);
+  await s.load('owner');
+  await findDelete(s.render()).props.onClick();
+  assert.equal(s.state[2].length,1);
+  assert.match(JSON.stringify(s.render()),/Could not confirm deletion/);
+ }
+});
+test('only a confirmed delete removes a video; cancelling keeps it',async()=>{
+ for(const approved of [false,true]){
+  const s=setup([{data:[{id:'v',status:'done',render_url:'https://media.test/v.mp4'}]}],[],{data:[{id:'v'}]},approved);
+  await s.load('owner');await findDelete(s.render()).props.onClick();
+  assert.equal(s.state[2].length,approved?0:1);
+ }
 });

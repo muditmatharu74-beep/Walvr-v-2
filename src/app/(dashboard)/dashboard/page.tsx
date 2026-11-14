@@ -13,6 +13,7 @@ export default function DashboardPage() {
   const [videosError, setVideosError] = useState("");
   const [videosLoaded, setVideosLoaded] = useState(false);
   const [profileError, setProfileError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
 
   const loadVideos = useCallback(async (userId: string) => {
     const supabase = createClient();
@@ -220,6 +221,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Videos */}
+        {deleteError && <p role="alert" style={{ color: "#f5c878" }}>{deleteError}</p>}
         {profileError && <p role="status" style={{ color: "#f5c878" }}>{profileError}</p>}
         {videosLoaded && videosError && <p role="status" style={{ color: "#f5c878" }}>{videosError}</p>}
         {!videosLoaded ? (
@@ -299,9 +301,17 @@ export default function DashboardPage() {
                       <button
                         onClick={async () => {
                        if (!confirm("Are you sure you want to delete this video?")) return;
-                       const supabase = createClient();
-                       await supabase.from("videos").delete().eq("id", video.id);
-                       setVideos((prev) => prev.filter((v) => v.id !== video.id));
+                       setDeleteError("");
+                       try {
+                         const { data, error } = await createClient().from("videos")
+                           .delete().eq("id", video.id).select("id");
+                         if (error || !Array.isArray(data) || !data.some(row => row.id === video.id)) {
+                           throw error ?? new Error("Deletion was not confirmed");
+                         }
+                         setVideos((prev) => prev.filter((v) => v.id !== video.id));
+                       } catch {
+                         setDeleteError("Could not confirm deletion. Your video is still shown; refresh before trying again.");
+                       }
                   }}
                         style={{ padding: "0.6rem 1rem", background: "transparent", color: "rgba(245,240,235,0.25)", border: "1px solid rgba(255,255,255,0.06)", fontSize: "0.7rem", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Georgia', serif", transition: "all 0.2s" }}
                         onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#c8102e"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(200,16,46,0.3)"; }}
