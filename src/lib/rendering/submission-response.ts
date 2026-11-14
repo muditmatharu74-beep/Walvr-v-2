@@ -7,11 +7,36 @@ export class SubmissionUnconfirmedError extends Error {
 }
 
 // A network failure can hide acceptance. Never automatically repeat this POST.
-export async function submitAndConfirm(fetcher: typeof fetch, request: RequestInit): Promise<void> {
-  let response: Response;
-  try { response = await fetcher("/api/process", request); }
-  catch { throw new SubmissionUnconfirmedError(); }
-  await confirmSubmission(response);
+export async function submitAndConfirm(
+  fetcher: typeof fetch, request: RequestInit, timeoutMs = 120_000,
+): Promise<void> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (request.signal?.aborted) abort();
+  else request.signal?.addEventListener("abort", abort, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      // Aborting the browser request does not cancel an accepted server job.
+      reject(new SubmissionUnconfirmedError());
+      controller.abort();
+    }, timeoutMs);
+  });
+  try {
+    await Promise.race([
+      (async () => {
+        let response: Response;
+        try { response = await fetcher("/api/process", { ...request, signal: controller.signal }); }
+        catch { throw new SubmissionUnconfirmedError(); }
+        // Include body reading in the deadline: headers alone are not a receipt.
+        await confirmSubmission(response);
+      })(),
+      deadline,
+    ]);
+  } finally {
+    clearTimeout(timer);
+    request.signal?.removeEventListener("abort", abort);
+  }
 }
 
 // Only leave after an accepted render or a durable queued job, never a generic 2xx.

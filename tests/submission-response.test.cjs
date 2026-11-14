@@ -6,7 +6,7 @@ const ts = require('typescript');
 const mod = { exports: {} };
 const source = fs.readFileSync(require('node:path').join(__dirname, '../src/lib/rendering/submission-response.ts'), 'utf8');
 vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText,
-  { module: mod, exports: mod.exports });
+  { module: mod, exports: mod.exports, AbortController, setTimeout, clearTimeout });
 const { confirmSubmission, submitAndConfirm, SubmissionUnconfirmedError } = mod.exports;
 
 test('upload accepts only a confirmed render with a tracking ID', async () => {
@@ -57,4 +57,28 @@ test('confirmed pre-submission rejections permit correcting the request', async 
     Response.json({error:'Unusable transcription',creditsRefunded:true},{status:422})]) {
     await assert.rejects(confirmSubmission(response),e=>!(e instanceof SubmissionUnconfirmedError));
   }
+});
+
+
+test('a stalled request or receipt body times out without resubmitting', async () => {
+  for (const phase of ['request', 'body']) {
+    let calls=0, signal;
+    const fetcher=async (_url, init) => {
+      calls++; signal=init.signal;
+      if (phase === 'request') return new Promise(() => {});
+      return {ok:true,status:200,json:()=>new Promise(() => {})};
+    };
+    await assert.rejects(submitAndConfirm(fetcher,{method:'POST'},10),
+      e=>e instanceof SubmissionUnconfirmedError);
+    assert.equal(calls,1);
+    assert.equal(signal.aborted,true);
+  }
+});
+test('confirmed submissions clear the deadline without aborting the request', async () => {
+  let signal;
+  await submitAndConfirm(async (_url,init)=>{
+    signal=init.signal;return Response.json({success:true,renderId:'confirmed'});
+  },{method:'POST'},10);
+  await new Promise(resolve=>setTimeout(resolve,20));
+  assert.equal(signal.aborted,false);
 });

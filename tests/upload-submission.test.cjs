@@ -11,8 +11,8 @@ function load(file,mocks,globals={}){
  vm.runInNewContext(source,{module:mod,exports:mod.exports,require:id=>{if(!(id in mocks))throw Error(id);return mocks[id]},...globals});
  return mod.exports;
 }
-const responses=load('src/lib/rendering/submission-response.ts',{});
-function setup(reply){
+const responses=load('src/lib/rendering/submission-response.ts',{},{AbortController,setTimeout,clearTimeout});
+function setup(reply, timeoutMs){
  const state=['caption',{name:'song.mp3'},'Song','',[],{id:'template',background_type:'dark-solid'},'clean-neon',false,false,'','pro',10000];
  const refs=[];let index=0,refIndex=0;
  const calls={uploads:0,rows:0,requests:0,navigation:[]};
@@ -24,7 +24,7 @@ function setup(reply){
  const page=load('src/app/(dashboard)/upload/page.tsx',{
   react,'react/jsx-runtime':{jsx,jsxs:jsx},'next/navigation':{useRouter:()=>({push:url=>calls.navigation.push(url)})},
   '@/lib/supabase/client':{createClient:()=>supabase},'@/lib/rendering/upload':{MAX_UPLOAD_BYTES:25000000,AUDIO_EXTENSIONS:['mp3']},
-  '@/lib/rendering/submission-response':responses,'@/components/NeonCaptionPreview':{NeonCaptionPreview:()=>null},
+  '@/lib/rendering/submission-response':{...responses,submitAndConfirm:(fetcher,request)=>responses.submitAndConfirm(fetcher,request,timeoutMs)},'@/components/NeonCaptionPreview':{NeonCaptionPreview:()=>null},
   '@/lib/rendering/neon-captions':{creditCost:()=>200,isNeonStyle:()=>true},
  },{fetch:async()=>{calls.requests++;return reply()}}).default;
  function render(){index=0;refIndex=0;return page()}
@@ -45,4 +45,13 @@ test('the upload page still allows correcting a clear pre-submission rejection',
  const s=setup(()=>Response.json({error:'Not enough credits'},{status:403}));
  await s.button(s.render(),'Create Video →').props.onClick();
  assert.ok(s.button(s.render(),'Create Video →'));assert.equal(s.calls.navigation.length,0);
+});
+
+test('a stalled Create attempt unlocks dashboard navigation but never a second submission',async()=>{
+ const s=setup(()=>new Promise(()=>{}),10);
+ await s.button(s.render(),'Create Video →').props.onClick();
+ assert.equal(s.button(s.render(),'Create Video →'),undefined);
+ s.button(s.render(),'Check Dashboard →').props.onClick();
+ assert.equal(s.calls.requests,1);assert.equal(s.calls.rows,1);assert.equal(s.calls.uploads,1);
+ assert.deepEqual(s.calls.navigation,['/dashboard']);
 });
