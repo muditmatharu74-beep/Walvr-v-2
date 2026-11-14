@@ -4,11 +4,11 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const ts=require('typescript');
 const path=require('node:path');
-function setup(replies){
+function setup(replies, profiles=[]){
  const state=[]; const callbacks=[]; let index=0;
  const mod={exports:{}};
  const jsx=(type,props)=>({type,props});
- const supabase={from:()=>({select:()=>({eq:()=>({order:async()=>{
+ const supabase={from:()=>({select:()=>({eq:()=>({single:async()=>{const r=profiles.shift();if(r instanceof Error)throw r;return r},order:async()=>{
    const reply=replies.shift();if(reply instanceof Error)throw reply;return reply;
  }})})})};
  const mocks={
@@ -25,7 +25,7 @@ function setup(replies){
  vm.runInNewContext(source,{module:mod,exports:mod.exports,require:id=>mocks[id]});
  function render(){index=0;return mod.exports.default()}
  render();
- return{state,load:callbacks[0],render};
+ return{state,load:callbacks[0],loadProfile:callbacks[1],render};
 }
 test('dashboard preserves confirmed videos across returned and thrown refresh errors, then recovers',async()=>{
  const video={id:'v',title:'My song',status:'pending'};
@@ -48,4 +48,20 @@ test('pending and audio processing have distinct descriptions',async()=>{
  const text=JSON.stringify(s.render());
  assert.match(text,/Waiting for processing confirmation/);
  assert.match(text,/Processing audio/);
+});
+
+test('credit refresh reflects charges and refunds without replacing failures with zero',async()=>{
+ const s=setup([],[{data:{credits:300,plan:'free'}},{data:{credits:100,plan:'free'}},
+  {data:null,error:{message:'offline'}},new Error('network'),{data:{credits:300,plan:'free'}}]);
+ for(const expected of [300,100,100,100,300]){
+  await s.loadProfile('owner');assert.equal(s.state[1].credits,expected);
+ }
+ assert.equal(s.state[5],'');
+});
+test('an unavailable initial balance is unknown, while a confirmed zero remains zero',async()=>{
+ const s=setup([],[{data:null,error:{message:'offline'}},{data:{credits:0,plan:'free'}}]);
+ await s.loadProfile('owner');
+ assert.equal(s.state[1],null);
+ assert.match(JSON.stringify(s.render()),/Could not refresh your credit balance/);
+ await s.loadProfile('owner');assert.equal(s.state[1].credits,0);assert.equal(s.state[5],'');
 });

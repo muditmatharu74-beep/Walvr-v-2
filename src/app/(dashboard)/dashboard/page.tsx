@@ -12,6 +12,7 @@ export default function DashboardPage() {
   const [videos, setVideos] = useState<any[]>([]);
   const [videosError, setVideosError] = useState("");
   const [videosLoaded, setVideosLoaded] = useState(false);
+  const [profileError, setProfileError] = useState("");
 
   const loadVideos = useCallback(async (userId: string) => {
     const supabase = createClient();
@@ -30,6 +31,19 @@ export default function DashboardPage() {
       // Keep the last confirmed list when a refresh fails.
       setVideosError("Could not refresh your videos. Showing the last available results. We’ll try again automatically.");
       return [];
+    }
+  }, []);
+
+  const loadProfile = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await createClient().from("profiles").select("*").eq("id", userId).single();
+      if (error || !data || !Number.isFinite(data.credits) || data.credits < 0) {
+        throw error ?? new Error("Invalid profile response");
+      }
+      setProfile(data);
+      setProfileError("");
+    } catch {
+      setProfileError("Could not refresh your credit balance. We’ll try again automatically.");
     }
   }, []);
 
@@ -66,9 +80,7 @@ export default function DashboardPage() {
       const currentUser = result.data.user;
       if (!currentUser) { router.push("/login"); return; }
       setUser(currentUser);
-      const profileResult = await supabase.from("profiles").select("*").eq("id", currentUser.id).single();
-      setProfile(profileResult.data);
-      const videoList = await loadVideos(currentUser.id);
+      const [videoList] = await Promise.all([loadVideos(currentUser.id), loadProfile(currentUser.id)]);
       checkRenders(videoList);
     }
     load();
@@ -77,11 +89,11 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(async () => {
-      const videoList = await loadVideos(user.id);
+      const [videoList] = await Promise.all([loadVideos(user.id), loadProfile(user.id)]);
       checkRenders(videoList);
     }, 10000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, loadVideos, loadProfile, checkRenders]);
 
   const plan = profile?.plan ?? "free";
   const planColor = plan === "free" ? "#888" : "#c8102e";
@@ -89,8 +101,8 @@ export default function DashboardPage() {
   const stats = [
     { label: "Total Videos", value: String(videos.length) },
     { label: "Completed", value: String(videos.filter((v) => v.status === "done").length) },
-    { label: "Credits", value: String(profile?.credits ?? 0) },
-    { label: "Plan", value: plan.charAt(0).toUpperCase() + plan.slice(1) },
+    { label: "Credits", value: profile ? String(profile.credits) : "—" },
+    { label: "Plan", value: profile ? plan.charAt(0).toUpperCase() + plan.slice(1) : "—" },
   ];
 
   return (
@@ -208,6 +220,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Videos */}
+        {profileError && <p role="status" style={{ color: "#f5c878" }}>{profileError}</p>}
         {videosLoaded && videosError && <p role="status" style={{ color: "#f5c878" }}>{videosError}</p>}
         {!videosLoaded ? (
           <p role="status">{videosError || "Loading your videos…"}</p>
