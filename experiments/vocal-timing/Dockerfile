@@ -6,6 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
     HF_HUB_DISABLE_TELEMETRY=1 \
     HF_HOME=/cache/huggingface \
     TORCH_HOME=/cache/torch \
+    NUMBA_CACHE_DIR=/tmp/walvr/numba \
     NLTK_DATA=/opt/nltk_data \
     OMP_NUM_THREADS=2 \
     TMPDIR=/tmp/walvr

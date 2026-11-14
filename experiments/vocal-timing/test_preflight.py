@@ -65,9 +65,9 @@ class ReadinessTests(unittest.TestCase):
             self.assertNotIn('private-worker-secret', output.getvalue())
             self.assertNotIn('short-private-secret', output.getvalue())
 
-    def test_runtime_check_probes_binaries_and_both_caches_without_claiming_models_warm(self):
+    def test_runtime_check_probes_binaries_and_all_caches_without_claiming_models_warm(self):
         with tempfile.TemporaryDirectory() as work:
-            env = {'HF_HOME': str(Path(work) / 'hf'), 'TORCH_HOME': str(Path(work) / 'torch')}
+            env = {'HF_HOME': str(Path(work) / 'hf'), 'TORCH_HOME': str(Path(work) / 'torch'), 'NUMBA_CACHE_DIR': str(Path(work) / 'numba')}
             with patch.dict(os.environ, env), patch('preflight.subprocess.run') as binary, \
                     patch('preflight.importlib.import_module') as native:
                 self.assertEqual(check_runtime(), {'runtimeReady': True, 'modelsWarmed': False})
@@ -75,6 +75,18 @@ class ReadinessTests(unittest.TestCase):
             self.assertIn('whisperx.alignment', [c.args[0] for c in native.call_args_list])
             self.assertTrue(Path(env['HF_HOME']).is_dir())
             self.assertTrue(Path(env['TORCH_HOME']).is_dir())
+            self.assertTrue(Path(env['NUMBA_CACHE_DIR']).is_dir())
+
+    def test_unusable_numba_cache_fails_before_native_imports(self):
+        with tempfile.TemporaryDirectory() as work:
+            blocked = Path(work) / 'not-a-directory'
+            blocked.write_text('occupied')
+            env = {'HF_HOME': work, 'TORCH_HOME': work, 'NUMBA_CACHE_DIR': str(blocked)}
+            with patch.dict(os.environ, env), patch('preflight.subprocess.run'), \
+                    patch('preflight.importlib.import_module') as native:
+                with self.assertRaises(FileExistsError):
+                    check_runtime()
+                native.assert_not_called()
 
     def test_bad_runtime_cannot_claim_a_billable_job_or_log_configuration_secrets(self):
         env = {'WALVR_APP_URL': 'https://app.test', 'WALVR_STORAGE_ORIGIN': 'https://storage.test',
