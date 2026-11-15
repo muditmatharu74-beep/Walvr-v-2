@@ -38,8 +38,9 @@ export default function UploadPage() {
   const [error, setError] = useState("");
   const errorRef = useRef<HTMLParagraphElement>(null);
   const submittingRef = useRef(false);
-  const [userPlan, setUserPlan] = useState("free");
-  const [userCredits, setUserCredits] = useState(0);
+  const [userPlan, setUserPlan] = useState("");
+  const [userCredits, setUserCredits] = useState<number | null>(null);
+  const [accountError, setAccountError] = useState("");
 
   useEffect(() => {
     if (error) {
@@ -48,22 +49,32 @@ export default function UploadPage() {
     }
   }, [error]);
 
-  useEffect(() => {
-    async function load() {
+  async function loadAccount() {
+    setAccountError("");
+    try {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: profile } = await supabase.from("profiles").select("plan, credits").eq("id", user.id).single();
-      setUserPlan(profile?.plan ?? "free");
-      setUserCredits(profile?.credits ?? 0);
-      const { data: tmpl } = await supabase.from("templates").select("*").eq("active", true).order("sort_order");
-      setTemplates(tmpl ?? []);
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) throw new Error("Your session could not be verified. Sign in again or retry.");
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("plan, credits").eq("id", user.id).single();
+      if (profileError || !profile || !PLAN_ORDER.includes(profile.plan) ||
+          !Number.isFinite(profile.credits) || profile.credits < 0) {
+        throw new Error("Could not load your plan and credit balance. Retry before creating a video.");
+      }
+      const { data: tmpl, error: templateError } = await supabase.from("templates").select("*").eq("active", true).order("sort_order");
+      if (templateError || !Array.isArray(tmpl)) throw new Error("Could not load video templates. Please retry.");
+      setUserPlan(profile.plan);
+      setUserCredits(profile.credits);
+      setTemplates(tmpl);
+    } catch (err) {
+      setAccountError(err instanceof Error ? err.message : "Could not load your account. Please retry.");
     }
-    load();
-  }, []);
+  }
+
+  useEffect(() => { void loadAccount(); }, []);
 
   function canUseTemplate(templatePlan: string) {
-    return PLAN_ORDER.indexOf(userPlan) >= PLAN_ORDER.indexOf(templatePlan);
+    return userCredits !== null && PLAN_ORDER.includes(templatePlan) &&
+      PLAN_ORDER.indexOf(userPlan) >= PLAN_ORDER.indexOf(templatePlan);
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -86,7 +97,7 @@ export default function UploadPage() {
   }
 
   async function handleSubmit() {
-    if (!file || !selectedTemplate || submittingRef.current) return;
+    if (!file || !selectedTemplate || submittingRef.current || userCredits === null || accountError) return;
     submittingRef.current = true;
     setLoading(true);
     setError("");
@@ -201,7 +212,7 @@ export default function UploadPage() {
           </p>
         </div>
         <p style={{ fontSize: "0.75rem", color: "rgba(245,240,235,0.3)", textAlign: "right" }}>
-                  Your balance: <span style={{ color: "#f5f0eb" }}>{userCredits} credits</span>
+                  Your balance: <span style={{ color: "#f5f0eb" }}>{userCredits === null ? (accountError ? "Unavailable" : "Loading…") : userCredits + " credits"}</span>
                 </p>
         <div style={{ display: "flex", gap: "6px", marginBottom: "3rem" }}>
           {steps.map((s, i) => (
@@ -209,6 +220,7 @@ export default function UploadPage() {
           ))}
         </div>
 
+        {accountError && <div role="alert"><p>{accountError}</p><button type="button" onClick={loadAccount}>Retry account loading</button></div>}
         {error && <p ref={errorRef} tabIndex={-1} role="alert" style={{ color: "#f5b2bc", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</p>}
 
         {/* Step 1 — Upload */}
@@ -328,7 +340,7 @@ export default function UploadPage() {
         {step === "caption" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
             <p style={{ fontSize: "0.75rem", color: "rgba(245,240,235,0.3)", textAlign: "right" }}>
-              Your balance: <span style={{ color: "#f5f0eb" }}>{userCredits} credits</span>
+              Your balance: <span style={{ color: "#f5f0eb" }}>{userCredits === null ? (accountError ? "Unavailable" : "Loading…") : userCredits + " credits"}</span>
             </p>
             {/* rest of caption step */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "1px", background: "rgba(200,16,46,0.08)", border: "1px solid rgba(200,16,46,0.08)" }}>
@@ -382,7 +394,7 @@ export default function UploadPage() {
                 </div>
                 <div style={{ display: "flex", gap: "1rem" }}>
                   <button onClick={() => setStep("template")} style={{ flex: 1, padding: "1rem", background: "transparent", color: "rgba(245,240,235,0.4)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "0.8rem", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Georgia', serif" }}>← Back</button>
-                  <button onClick={submissionUnconfirmed ? () => router.push("/dashboard") : handleSubmit} disabled={loading} style={{ flex: 2, padding: "1rem", background: "#8b0014", color: "#f5f0eb", border: "1px solid rgba(200,16,46,0.6)", fontSize: "0.8rem", letterSpacing: "0.2em", textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "'Georgia', serif" }}>
+                  <button onClick={submissionUnconfirmed ? () => router.push("/dashboard") : handleSubmit} disabled={loading || userCredits === null || !!accountError} style={{ flex: 2, padding: "1rem", background: "#8b0014", color: "#f5f0eb", border: "1px solid rgba(200,16,46,0.6)", fontSize: "0.8rem", letterSpacing: "0.2em", textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "'Georgia', serif" }}>
                     {loading ? "Creating..." : submissionUnconfirmed ? "Check Dashboard →" : "Create Video →"}
                   </button>
                 </div>
