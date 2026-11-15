@@ -76,3 +76,30 @@ test('account lookup errors block Create, report the problem, and recover on exp
   assert.equal(s.button(tree,'Retry account loading'),undefined);
  }
 });
+
+test('invalid metadata and audio are rejected before uploading or creating a pending row',async()=>{
+ for(const change of [
+  state=>state[2]='   ',state=>state[2]='a'.repeat(301),state=>state[3]='a'.repeat(301),
+  state=>state[1]={name:'song.exe',size:100},state=>state[1]={name:'song.mp3',size:0},
+  state=>state[1]={name:'song.mp3',size:25000001}
+ ]){
+  const s=setup(()=>Response.json({success:true,renderId:'r'}));
+  change(s.state);
+  await s.button(s.render(),'Create Video →').props.onClick();
+  assert.equal(s.calls.uploads,0);assert.equal(s.calls.rows,0);assert.equal(s.calls.requests,0);
+  assert.ok(s.state[9]);
+ }
+});
+test('a known insufficient balance refreshes the account without uploading',async()=>{
+ const s=setup(()=>Response.json({success:true,renderId:'r'}),undefined,[{data:{plan:'pro',credits:100}}]);
+ s.state[10]='pro';s.state[11]=100;
+ await s.button(s.render(),'Create Video →').props.onClick();
+ assert.equal(s.calls.uploads,0);assert.equal(s.calls.rows,0);assert.equal(s.calls.requests,0);
+ await new Promise(resolve=>setImmediate(resolve));
+});
+test('Studio accounts supported by the server also load on the upload page',async()=>{
+ const s=setup(()=>Response.json({success:true,renderId:'r'}),undefined,[{data:{plan:'studio',credits:1000}}]);
+ s.render();await s.loadAccount();
+ assert.equal(s.state[10],'studio');assert.equal(s.state[11],1000);
+ assert.equal(s.button(s.render(),'Create Video →').props.disabled,false);
+});

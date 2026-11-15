@@ -22,7 +22,7 @@ CAPTION_STYLES.push(
   { id: "pixel-neon", label: "Pixel Neon", desc: "Single-word game lettering with soft fades", preview: { text: "LATE", glow: true, bottom: false, yellow: false } },
 );
 
-const PLAN_ORDER = ["free", "starter", "pro", "business"];
+const PLAN_ORDER = ["free", "starter", "pro", "business", "studio"];
 
 export default function UploadPage() {
   const router = useRouter();
@@ -98,6 +98,21 @@ export default function UploadPage() {
 
   async function handleSubmit() {
     if (!file || !selectedTemplate || submittingRef.current || userCredits === null || accountError) return;
+    if (!title.trim() || title.trim().length > 300 || artist.length > 300) {
+      setError("Enter a title of 1–300 characters and an artist name up to 300 characters.");
+      return;
+    }
+    const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!AUDIO_EXTENSIONS.includes(extension) || file.size === 0 || file.size > MAX_UPLOAD_BYTES) {
+      setError("Choose an MP3, MP4, WAV, or M4A file up to 25 MB.");
+      return;
+    }
+    const required = creditCost(userPlan, selectedTemplate.background_type, selectedCaption);
+    if (userCredits < required) {
+      setError("Your displayed balance is too low for this video. Refresh your account balance or top up before trying again.");
+      void loadAccount();
+      return;
+    }
     submittingRef.current = true;
     setLoading(true);
     setError("");
