@@ -6,6 +6,9 @@ export async function updateSession(request: NextRequest) {
     request,
   });
 
+  // Public caption demo has no account data or authenticated operations.
+  if (request.nextUrl.pathname === "/caption-preview") return supabaseResponse;
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

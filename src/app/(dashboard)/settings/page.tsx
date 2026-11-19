@@ -46,8 +46,8 @@ export default function SettingsPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
-  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [loading, setLoading] = useState(false);
+  const [billingError, setBillingError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   const [quizStep, setQuizStep] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
@@ -67,16 +67,23 @@ export default function SettingsPage() {
     load();
   }, []);
 
-  async function handleUpgrade(priceId: string) {
+  async function handleUpgrade(planId: string) {
     setLoading(true);
-    const res = await fetch("/api/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ priceId }),
-    });
-    const data = await res.json();
-    if (data.url) router.push(data.url);
-    else setLoading(false);
+    setBillingError("");
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) throw new Error(data.error || "Checkout is unavailable. Please try again later.");
+      router.push(data.url);
+    } catch (error) {
+      setBillingError(error instanceof Error ? error.message : "Checkout is unavailable. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleSignOut() {
@@ -105,27 +112,21 @@ export default function SettingsPage() {
       id: "starter",
       name: "Starter",
       monthlyPrice: 9,
-      annualPrice: 90,
-      priceId: process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID ?? "",
-      features: ["10 videos/month", "No watermark", "1080p export", "3 templates"],
+      features: ["1,500 credits/month", "15 basic or 7 standard/neon videos", "No watermark", "1080p export", "3 templates"],
       cta: "Get Starter",
     },
     {
       id: "pro",
       name: "Pro",
-      monthlyPrice: 19,
-      annualPrice: 190,
-      priceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID ?? "",
-      features: ["Unlimited videos", "No watermark", "1080p export", "All templates", "Priority support"],
+      monthlyPrice: 19.99,
+      features: ["3,000 credits/month", "30 basic or 15 standard/neon videos", "No watermark", "1080p export", "All templates", "Priority support"],
       cta: "Get Pro",
     },
     {
       id: "business",
       name: "Business",
-      monthlyPrice: 49,
-      annualPrice: 490,
-      priceId: process.env.NEXT_PUBLIC_STRIPE_BUSINESS_PRICE_ID ?? "",
-      features: ["Unlimited videos", "No watermark", "4K export", "All templates", "Priority support", "New templates monthly"],
+      monthlyPrice: 49.99,
+      features: ["8,000 credits/month", "22 videos at 350 credits each", "No watermark", "4K export", "All templates", "Priority support", "New templates monthly"],
       cta: "Get Business",
     },
   ];
@@ -242,26 +243,16 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* Billing toggle */}
-            <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "2.5rem" }}>
-              <p style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(245,240,235,0.4)" }}>Billing</p>
-              <div style={{ display: "flex", background: "rgba(13,3,5,0.6)", border: "1px solid rgba(200,16,46,0.12)", padding: "4px" }}>
-                {(["monthly", "annual"] as const).map((b) => (
-                  <button key={b} onClick={() => setBilling(b)} style={{ padding: "0.5rem 1.25rem", background: billing === b ? "#8b0014" : "transparent", color: billing === b ? "#f5f0eb" : "rgba(245,240,235,0.35)", border: "none", fontSize: "0.7rem", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", transition: "all 0.2s", fontFamily: "'Georgia', serif" }}>{b}</button>
-                ))}
-              </div>
-              {billing === "annual" && (
-                <span style={{ fontSize: "0.65rem", letterSpacing: "0.15em", textTransform: "uppercase", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)", padding: "0.25rem 0.75rem" }}>2 months free</span>
-              )}
-            </div>
+            <p style={{ color: "rgba(245,240,235,0.4)", fontSize: "0.8rem", marginBottom: "2.5rem" }}>Monthly subscription. Confirm the recurring price at checkout.</p>
 
             {/* Plans */}
+            {billingError && <p role="alert" style={{ color: "#fca5a5", marginBottom: "1rem" }}>{billingError}</p>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1px", background: "rgba(200,16,46,0.08)", marginBottom: "4rem" }}>
               {plans.map((p) => {
                 const isCurrent = plan === p.id;
                 const isRecommended = recommendedPlan === p.id;
-                const price = billing === "annual" ? p.annualPrice : p.monthlyPrice;
-                const period = billing === "annual" ? "/year" : "/month";
+                const price = p.monthlyPrice;
+                const period = "/month";
 
                 return (
                   <div key={p.id} style={{
@@ -287,9 +278,6 @@ export default function SettingsPage() {
                     <div style={{ marginBottom: "2rem" }}>
                       <span style={{ fontSize: "3rem", fontWeight: "700", color: "#f5f0eb", letterSpacing: "-0.03em" }}>${price}</span>
                       <span style={{ color: "rgba(245,240,235,0.3)", fontSize: "0.85rem" }}>{period}</span>
-                      {billing === "annual" && (
-                        <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.25)", marginTop: "0.25rem" }}>${Math.round(price / 12)}/month billed annually</p>
-                      )}
                     </div>
 
                     <ul style={{ listStyle: "none", padding: 0, marginBottom: "2rem" }}>
@@ -302,7 +290,7 @@ export default function SettingsPage() {
                     </ul>
 
                     <button
-                      onClick={() => !isCurrent && p.priceId && handleUpgrade(p.priceId)}
+                      onClick={() => !isCurrent && handleUpgrade(p.id)}
                       disabled={isCurrent || loading}
                       style={{
                         width: "100%",
@@ -335,9 +323,14 @@ export default function SettingsPage() {
               <p style={{ fontSize: "2rem", fontWeight: "700", color: "#f5f0eb" }}>{profile?.credits ?? 0} <span style={{ fontSize: "0.8rem", color: "rgba(245,240,235,0.3)", fontWeight: "400" }}>remaining</span></p>
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)", marginBottom: "0.25rem" }}>Basic video = 100 credits</p>
-              <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)", marginBottom: "0.25rem" }}>Standard video = 200 credits</p>
-              <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)" }}>Premium video = 350 credits</p>
+              {plan === "business" || plan === "studio" ? (
+                <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)" }}>All videos on your plan = 350 credits each</p>
+              ) : (
+                <>
+                  <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)", marginBottom: "0.25rem" }}>Basic video = 100 credits</p>
+                  <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)" }}>Standard/neon video = 200 credits</p>
+                </>
+              )}
             </div>
           </div>
 

@@ -3,15 +3,40 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createClient as createSessionClient } from "@/lib/supabase/server";
-import { startDarkLyricsRender } from "@/lib/rendering/remotion";
+import { assertDarkLyricsConfigured, startDarkLyricsRender } from "@/lib/rendering/remotion";
 import { songDuration as getSongDuration } from "@/lib/rendering/timing";
 import { ownedUploadUrl, MAX_UPLOAD_BYTES } from "@/lib/rendering/upload";
+import { assertUsableTranscription, TranscriptionQualityError } from "@/lib/rendering/transcription-quality";
+import { vocalJobsEnabled, assertVocalWorkerConfigured, enqueueVocalJob } from "@/lib/rendering/vocal-jobs";
+
+import { CAPTION_STYLE_IDS, creditCost as getCreditCost, isNeonStyle, neonDesign, neonTextElements } from "@/lib/rendering/neon-captions";
 
 const requestSchema = z.object({
   videoId: z.string().uuid(), templateId: z.string().uuid(),
   fileUrl: z.string().url(), title: z.string().trim().min(1).max(300),
   artist: z.string().max(300).default(""),
-  captionStyle: z.enum(["bold-overlay", "word-highlight", "frosted", "minimal", "karaoke"]),
+  captionStyle: z.enum(CAPTION_STYLE_IDS),
+});
+
+// Model output is untrusted even when it is syntactically valid JSON.
+// Keep background pacing finite and section lookups safe before any submission.
+const analysisSchema = z.object({
+  mood: z.enum(["energetic", "dark", "sad", "romantic", "aggressive", "chill", "uplifting"]).catch("dark"),
+  energy: z.enum(["high", "medium", "low"]).catch("medium"),
+  genre: z.string().max(100).catch("unknown"),
+  themes: z.array(z.string().max(100)).max(20).catch([]),
+  clipStyle: z.enum(["fast-cuts", "slow-cinematic", "mixed"]).catch("mixed"),
+  colorGrade: z.enum(["warm", "cold", "dark", "vibrant", "monochrome"]).catch("dark"),
+  cutInterval: z.number().finite().min(0.5).max(600).catch(4),
+  verseInterval: z.number().finite().min(0.5).max(600).catch(5),
+  chorusInterval: z.number().finite().min(0.5).max(600).catch(2),
+  dropInterval: z.number().finite().min(0.5).max(600).catch(1),
+  sections: z.array(z.object({
+    type: z.enum(["verse", "chorus", "drop", "bridge"]),
+    startTime: z.number().finite().min(0).max(600),
+    endTime: z.number().finite().min(0).max(600),
+  }).refine(section => section.endTime > section.startTime)).max(100).catch([]),
+  notes: z.string().max(2000).catch(""),
 });
 
 const anthropic = new Anthropic({
@@ -76,10 +101,33 @@ export async function POST(request: Request) {
       }
     }
 
+    if (template.background_type === "dark-solid") {
+      try { assertDarkLyricsConfigured(); }
+      catch {
+        return NextResponse.json({
+          error: "This template is temporarily unavailable. Your credits have not been charged.",
+          code: "RENDERER_NOT_CONFIGURED",
+        }, { status: 503 });
+      }
+    }
+
     const creditCost = getCreditCost(plan, template?.background_type, captionStyle);
 
     if (currentCredits < creditCost) {
       return NextResponse.json({ error: "Not enough credits. Top up to continue.", credits: currentCredits, required: creditCost }, { status: 403 });
+    }
+
+    if (template.background_type === "dark-solid" && vocalJobsEnabled()) {
+      try { assertVocalWorkerConfigured(); }
+      catch { return NextResponse.json({error: "Lyric timing is temporarily unavailable. Your credits have not been charged."}, {status: 503}); }
+      // Reservation and queue insertion commit together. No long ML work here.
+      let queued;
+      try { queued = await enqueueVocalJob(supabase, {userId, videoId, fileUrl, captionStyle, cost: creditCost, plan}); }
+      catch (error) { return NextResponse.json({error: error instanceof Error ? error.message : "Could not confirm lyric processing. Check your dashboard."}, {status: 503}); }
+      if (queued.status !== "reserved") return NextResponse.json({
+        error: queued.status === "insufficient" ? "Not enough credits" : "Video or plan changed. Refresh and try again.",
+      }, {status: queued.status === "insufficient" ? 403 : 409});
+      return NextResponse.json({success: true, status: "queued", videoId, creditsRemaining: queued.credits}, {status: 202});
     }
 
     const { data: reservation, error: claimError } = await supabase.rpc("reserve_video_credits", {
@@ -93,6 +141,7 @@ export async function POST(request: Request) {
     claimed = true;
 
     const transcription = await transcribeAudio(fileUrl);
+    assertUsableTranscription(transcription, isNeonStyle(captionStyle));
     const analysis = await analyzeWithClaude({ title, artist, lyrics: transcription.text });
 
     const { error: analysisError } = await supabase
@@ -128,7 +177,8 @@ export async function POST(request: Request) {
       const beats: number[] = [];
       let t = 0;
       while (t < songDuration) {
-        beats.push(parseFloat(t.toFixed(2)));
+        const beat = parseFloat(t.toFixed(2));
+        if (beat < songDuration) beats.push(beat);
         const currentSection = sections.find((s) => t >= s.startTime && t < s.endTime);
         let interval = cutInterval;
         if (currentSection) {
@@ -140,7 +190,7 @@ export async function POST(request: Request) {
       }
 
       render = await startDarkLyricsRender({
-        captions: transcription.words ?? [], beats, songDuration, audioUrl: fileUrl,
+        captions: transcription.words ?? [], beats, songDuration, audioUrl: fileUrl, captionStyle,
       });
     } else {
       render = await startRender({
@@ -173,23 +223,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, renderId: render.id, creditsRemaining });
   } catch (err) {
     console.error("Process error:", err);
+    let creditsRefunded = false;
     if (claimed && !renderStarted && videoId && userId) {
       const { error: refundError } = await supabase.rpc("settle_video_credits", {
         p_user_id: userId, p_video_id: videoId, p_status: "error", p_render_id: null, p_url: null,
       });
       if (refundError) console.error("Render refund requires reconciliation", { videoId, refundError });
+      else creditsRefunded = true;
     }
+    if (err instanceof TranscriptionQualityError) return NextResponse.json({
+      error: err.message + (creditsRefunded ? " Your credits have been returned." : ""),
+      code: "TRANSCRIPTION_UNUSABLE", creditsRefunded,
+    }, { status: 422 });
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
-}
-
-function getCreditCost(plan: string, backgroundType?: string, captionStyle?: string): number {
-  const isPremiumPlan = plan === "business" || plan === "studio";
-  const isBasicTemplate = backgroundType === "color-block" || backgroundType === "dark-solid";
-  const isBasicCaption = captionStyle === "bold-overlay" || captionStyle === "minimal";
-  if (isPremiumPlan) return 350;
-  if (isBasicTemplate && isBasicCaption) return 100;
-  return 200;
 }
 
 async function transcribeAudio(fileUrl: string) {
@@ -261,24 +308,12 @@ Return exactly:
     ],
   });
 
-  const text = message.content[0].type === "text" ? message.content[0].text : "{}";
+  const textBlock = message.content.find(block => block.type === "text");
+  const text = textBlock?.type === "text" ? textBlock.text : "{}";
   try {
-    return JSON.parse(text);
+    return analysisSchema.parse(JSON.parse(text));
   } catch {
-    return {
-      mood: "dark",
-      energy: "medium",
-      genre: "unknown",
-      themes: [],
-      clipStyle: "mixed",
-      colorGrade: "dark",
-      cutInterval: 4,
-      verseInterval: 5,
-      chorusInterval: 2,
-      dropInterval: 1,
-      sections: [],
-      notes: "",
-    };
+    return analysisSchema.parse({});
   }
 }
 
@@ -317,7 +352,8 @@ function generateBeatTimestamps(
   let t = 0;
 
   while (t < songDuration) {
-    beats.push(parseFloat(t.toFixed(2)));
+    const beat = parseFloat(t.toFixed(2));
+    if (beat < songDuration) beats.push(beat);
     const currentSection = sections.find((s) => t >= s.startTime && t < s.endTime);
     let interval = cutInterval;
     if (currentSection) {
@@ -391,7 +427,7 @@ async function startRender({
         shape: "rectangle",
         track: 1,
         time: beat,
-        duration: (nextBeat - beat) + 0.05,
+        duration: Math.min((nextBeat - beat) + 0.05, songDuration - beat),
         width: "100%",
         height: "100%",
         x: "50%",
@@ -426,7 +462,7 @@ async function startRender({
         type: "video",
         track: 1,
         time: beat,
-        duration: (nextBeat - beat) + 0.05,
+        duration: Math.min((nextBeat - beat) + 0.05, songDuration - beat),
         source: availableClips[i % availableClips.length].url,
         fit: "cover",
       };
@@ -434,7 +470,7 @@ async function startRender({
   }
 
   // Caption elements — Dark Lyrics gets special treatment
-  const captionElements = captions.map((word, index) => {
+  const captionElements = isNeonStyle(captionStyle) ? neonTextElements(captions, captionStyle) : captions.map((word, index) => {
     const base = {
       name: `word-${index}`,
       type: "text",
@@ -560,8 +596,10 @@ async function startRender({
     body: JSON.stringify({
       source: {
         output_format: "mp4",
+        duration: songDuration,
         width,
         height,
+        ...(isNeonStyle(captionStyle) ? { fonts: [{ family: neonDesign(captionStyle).family, weight: neonDesign(captionStyle).weight, style: "normal", source: neonDesign(captionStyle).fontUrl }] } : {}),
         elements: [
           ...backgroundElements,
           {
@@ -569,6 +607,7 @@ async function startRender({
             type: "audio",
             track: 3,
             time: 0,
+            duration: songDuration,
             source: fileUrl,
           },
           ...captionElements,
