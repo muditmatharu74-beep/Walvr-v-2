@@ -8,21 +8,22 @@ function setup(replies, profiles=[], deletion={data:[]}, approved=true){
  const state=[]; const callbacks=[]; let index=0;
  const mod={exports:{}};
  const jsx=(type,props)=>({type,props});
- const supabase={from:()=>({delete:()=>({eq:()=>({select:async()=>{if(deletion instanceof Error)throw deletion;return deletion}})}),select:()=>({eq:()=>({single:async()=>{const r=profiles.shift();if(r instanceof Error)throw r;return r},order:async()=>{
+ const supabase={from:()=>({delete:()=>({eq:()=>({select:async()=>{if(deletion instanceof Error)throw deletion;return deletion}})}),select:()=>({eq:()=>({abortSignal:()=>({single:async()=>{const r=profiles.shift();if(r instanceof Error)throw r;return r}}),order:()=>({abortSignal:async()=>{
    const reply=replies.shift();if(reply instanceof Error)throw reply;return reply;
- }})})})};
+ }})})})})};
  const mocks={
   react:{useState:initial=>{const i=index++;if(state[i]===undefined)state[i]=initial;
    return[state[i],v=>state[i]=typeof v==='function'?v(state[i]):v]},
    useEffect:()=>{},useCallback:fn=>{callbacks.push(fn);return fn}},
   'react/jsx-runtime':{jsx,jsxs:jsx},
   'next/navigation':{useRouter:()=>({push:()=>{}})},
+  '@/lib/rendering/poll':{startPolling:()=>()=>{}},
   'next/link':{default:()=>null},
   '@/lib/supabase/client':{createClient:()=>supabase}
  };
  const source=ts.transpileModule(fs.readFileSync(path.join(__dirname,'../src/app/(dashboard)/dashboard/page.tsx'),'utf8'),
   {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
- vm.runInNewContext(source,{module:mod,exports:mod.exports,require:id=>mocks[id],confirm:()=>approved});
+ vm.runInNewContext(source,{module:mod,exports:mod.exports,require:id=>mocks[id],confirm:()=>approved,AbortSignal});
  function render(){index=0;return mod.exports.default()}
  render();
  return{state,load:callbacks[0],loadProfile:callbacks[1],render};

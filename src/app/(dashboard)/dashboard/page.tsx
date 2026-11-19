@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { startPolling } from "@/lib/rendering/poll";
 import { createClient } from "@/lib/supabase/client";
 
 export default function DashboardPage() {
@@ -22,7 +23,7 @@ export default function DashboardPage() {
         .from("videos")
         .select("*")
         .eq("user_id", userId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false }).abortSignal(AbortSignal.timeout(15_000));
       if (error || !Array.isArray(data)) throw error ?? new Error("Invalid video response");
       setVideos(data);
       setVideosError("");
@@ -37,7 +38,7 @@ export default function DashboardPage() {
 
   const loadProfile = useCallback(async (userId: string) => {
     try {
-      const { data, error } = await createClient().from("profiles").select("*").eq("id", userId).single();
+      const { data, error } = await createClient().from("profiles").select("*").eq("id", userId).abortSignal(AbortSignal.timeout(15_000)).single();
       if (error || !data || !Number.isFinite(data.credits) || data.credits < 0) {
         throw error ?? new Error("Invalid profile response");
       }
@@ -54,6 +55,7 @@ export default function DashboardPage() {
       try {
         const res = await fetch("/api/check-render", {
           method: "POST",
+          signal: AbortSignal.timeout(15_000),
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ renderId: video.render_id, videoId: video.id }),
         });
@@ -81,19 +83,18 @@ export default function DashboardPage() {
       const currentUser = result.data.user;
       if (!currentUser) { router.push("/login"); return; }
       setUser(currentUser);
-      const [videoList] = await Promise.all([loadVideos(currentUser.id), loadProfile(currentUser.id)]);
-      checkRenders(videoList);
+
     }
     load();
   }, []);
 
   useEffect(() => {
     if (!user) return;
-    const interval = setInterval(async () => {
+    return startPolling(async () => {
       const [videoList] = await Promise.all([loadVideos(user.id), loadProfile(user.id)]);
-      checkRenders(videoList);
+      await checkRenders(videoList);
     }, 10000);
-    return () => clearInterval(interval);
+
   }, [user, loadVideos, loadProfile, checkRenders]);
 
   const plan = profile?.plan ?? "free";
