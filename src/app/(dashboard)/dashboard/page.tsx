@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { startPolling } from "@/lib/rendering/poll";
 import { createClient } from "@/lib/supabase/client";
 
 export default function DashboardPage() {
@@ -10,16 +11,42 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [videos, setVideos] = useState<any[]>([]);
+  const [videosError, setVideosError] = useState("");
+  const [videosLoaded, setVideosLoaded] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
 
   const loadVideos = useCallback(async (userId: string) => {
     const supabase = createClient();
-    const { data } = await supabase
-      .from("videos")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
-    setVideos(data ?? []);
-    return data ?? [];
+    try {
+      const { data, error } = await supabase
+        .from("videos")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false }).abortSignal(AbortSignal.timeout(15_000));
+      if (error || !Array.isArray(data)) throw error ?? new Error("Invalid video response");
+      setVideos(data);
+      setVideosError("");
+      setVideosLoaded(true);
+      return data;
+    } catch {
+      // Keep the last confirmed list when a refresh fails.
+      setVideosError("Could not refresh your videos. Showing the last available results. We’ll try again automatically.");
+      return [];
+    }
+  }, []);
+
+  const loadProfile = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await createClient().from("profiles").select("*").eq("id", userId).abortSignal(AbortSignal.timeout(15_000)).single();
+      if (error || !data || !Number.isFinite(data.credits) || data.credits < 0) {
+        throw error ?? new Error("Invalid profile response");
+      }
+      setProfile(data);
+      setProfileError("");
+    } catch {
+      setProfileError("Could not refresh your credit balance. We’ll try again automatically.");
+    }
   }, []);
 
   const checkRenders = useCallback(async (videoList: any[]) => {
@@ -28,9 +55,11 @@ export default function DashboardPage() {
       try {
         const res = await fetch("/api/check-render", {
           method: "POST",
+          signal: AbortSignal.timeout(15_000),
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ renderId: video.render_id, videoId: video.id }),
         });
+        if (!res.ok) continue;
         const data = await res.json();
         if (data.status === "done" || data.status === "error") {
           setVideos((prev) =>
@@ -54,22 +83,19 @@ export default function DashboardPage() {
       const currentUser = result.data.user;
       if (!currentUser) { router.push("/login"); return; }
       setUser(currentUser);
-      const profileResult = await supabase.from("profiles").select("*").eq("id", currentUser.id).single();
-      setProfile(profileResult.data);
-      const videoList = await loadVideos(currentUser.id);
-      checkRenders(videoList);
+
     }
     load();
   }, []);
 
   useEffect(() => {
     if (!user) return;
-    const interval = setInterval(async () => {
-      const videoList = await loadVideos(user.id);
-      checkRenders(videoList);
+    return startPolling(async () => {
+      const [videoList] = await Promise.all([loadVideos(user.id), loadProfile(user.id)]);
+      await checkRenders(videoList);
     }, 10000);
-    return () => clearInterval(interval);
-  }, [user]);
+
+  }, [user, loadVideos, loadProfile, checkRenders]);
 
   const plan = profile?.plan ?? "free";
   const planColor = plan === "free" ? "#888" : "#c8102e";
@@ -77,8 +103,8 @@ export default function DashboardPage() {
   const stats = [
     { label: "Total Videos", value: String(videos.length) },
     { label: "Completed", value: String(videos.filter((v) => v.status === "done").length) },
-    { label: "Credits", value: String(profile?.credits ?? 0) },
-    { label: "Plan", value: plan.charAt(0).toUpperCase() + plan.slice(1) },
+    { label: "Credits", value: profile ? String(profile.credits) : "—" },
+    { label: "Plan", value: profile ? plan.charAt(0).toUpperCase() + plan.slice(1) : "—" },
   ];
 
   return (
@@ -196,7 +222,12 @@ export default function DashboardPage() {
         </div>
 
         {/* Videos */}
-        {videos.length === 0 ? (
+        {deleteError && <p role="alert" style={{ color: "#f5c878" }}>{deleteError}</p>}
+        {profileError && <p role="status" style={{ color: "#f5c878" }}>{profileError}</p>}
+        {videosLoaded && videosError && <p role="status" style={{ color: "#f5c878" }}>{videosError}</p>}
+        {!videosLoaded ? (
+          <p role="status">{videosError || "Loading your videos…"}</p>
+        ) : videos.length === 0 ? (
           <div style={{
             border: "1px solid rgba(200,16,46,0.12)",
             padding: "6rem 2rem",
@@ -220,6 +251,7 @@ export default function DashboardPage() {
               const isDone = video.status === "done";
               const isRendering = video.status === "rendering" || video.status === "processing";
               const isError = video.status === "error";
+              const isPending = video.status === "pending";
               return (
                 <div key={video.id}
                   style={{
@@ -244,7 +276,7 @@ export default function DashboardPage() {
                       boxShadow: isRendering ? "0 0 8px rgba(200,16,46,0.7)" : isDone ? "0 0 6px rgba(74,222,128,0.4)" : "none",
                     }} />
                     <span style={{ fontSize: "0.6rem", letterSpacing: "0.2em", textTransform: "uppercase", color: isDone ? "#4ade80" : isRendering ? "#c8102e" : "rgba(245,240,235,0.25)" }}>
-                      {isDone ? "Done" : isRendering ? "Rendering" : isError ? "Error" : "Pending"}
+                      {isDone ? "Done" : video.status === "processing" ? "Processing audio" : isRendering ? "Rendering" : isError ? "Error" : "Pending"}
                     </span>
                   </div>
 
@@ -270,15 +302,29 @@ export default function DashboardPage() {
                       <button
                         onClick={async () => {
                        if (!confirm("Are you sure you want to delete this video?")) return;
-                       const supabase = createClient();
-                       await supabase.from("videos").delete().eq("id", video.id);
-                       setVideos((prev) => prev.filter((v) => v.id !== video.id));
+                       setDeleteError("");
+                       try {
+                         const { data, error } = await createClient().from("videos")
+                           .delete().eq("id", video.id).select("id");
+                         if (error || !Array.isArray(data) || !data.some(row => row.id === video.id)) {
+                           throw error ?? new Error("Deletion was not confirmed");
+                         }
+                         setVideos((prev) => prev.filter((v) => v.id !== video.id));
+                       } catch {
+                         setDeleteError("Could not confirm deletion. Your video is still shown; refresh before trying again.");
+                       }
                   }}
                         style={{ padding: "0.6rem 1rem", background: "transparent", color: "rgba(245,240,235,0.25)", border: "1px solid rgba(255,255,255,0.06)", fontSize: "0.7rem", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Georgia', serif", transition: "all 0.2s" }}
                         onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#c8102e"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(200,16,46,0.3)"; }}
                         onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(245,240,235,0.25)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.06)"; }}
                       >Delete</button>
                     </div>
+                  )}
+
+                  {isPending && (
+                    <p style={{ fontSize: "0.8rem", color: "rgba(245,240,235,0.65)" }}>
+                      Waiting for processing confirmation. This page refreshes automatically; check this attempt before creating another video.
+                    </p>
                   )}
 
                   {isRendering && (

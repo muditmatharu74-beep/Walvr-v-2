@@ -1,9 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { MAX_UPLOAD_BYTES, AUDIO_EXTENSIONS } from "@/lib/rendering/upload";
+import { submitAndConfirm, SubmissionUnconfirmedError } from "@/lib/rendering/submission-response";
+import { makeClipFile } from "@/lib/rendering/clip-audio";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+
+import { NeonCaptionPreview } from "@/components/NeonCaptionPreview";
+import { creditCost, isNeonStyle } from "@/lib/rendering/neon-captions";
 
 const CAPTION_STYLES = [
   { id: "bold-overlay", label: "Bold", desc: "Big white centered text", preview: { text: "WORDS", glow: false, bottom: false, yellow: false } },
@@ -13,7 +18,12 @@ const CAPTION_STYLES = [
   { id: "karaoke", label: "Karaoke", desc: "Yellow text with white stroke", preview: { text: "WORDS", glow: false, bottom: false, yellow: true } },
 ];
 
-const PLAN_ORDER = ["free", "starter", "pro", "business"];
+CAPTION_STYLES.push(
+  { id: "clean-neon", label: "Clean Neon", desc: "Bold single words with soft fades and cyan glow", preview: { text: "Late", glow: true, bottom: false, yellow: false } },
+  { id: "pixel-neon", label: "Pixel Neon", desc: "Single-word game lettering with soft fades", preview: { text: "LATE", glow: true, bottom: false, yellow: false } },
+);
+
+const PLAN_ORDER = ["free", "starter", "pro", "business", "studio"];
 
 export default function UploadPage() {
   const router = useRouter();
@@ -25,26 +35,50 @@ export default function UploadPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [selectedCaption, setSelectedCaption] = useState("bold-overlay");
   const [loading, setLoading] = useState(false);
+  const [submissionUnconfirmed, setSubmissionUnconfirmed] = useState(false);
   const [error, setError] = useState("");
-  const [userPlan, setUserPlan] = useState("free");
-  const [userCredits, setUserCredits] = useState(0);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const submittingRef = useRef(false);
+  const [userPlan, setUserPlan] = useState("");
+  const [userCredits, setUserCredits] = useState<number | null>(null);
+  const [accountError, setAccountError] = useState("");
+  const [clipEnabled, setClipEnabled] = useState(false);
+  const [clipStart, setClipStart] = useState("0");
+  const [clipEnd, setClipEnd] = useState("30");
 
   useEffect(() => {
-    async function load() {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: profile } = await supabase.from("profiles").select("plan, credits").eq("id", user.id).single();
-      setUserPlan(profile?.plan ?? "free");
-      setUserCredits(profile?.credits ?? 0);
-      const { data: tmpl } = await supabase.from("templates").select("*").eq("active", true).order("sort_order");
-      setTemplates(tmpl ?? []);
+    if (error) {
+      errorRef.current?.focus({ preventScroll: true });
+      errorRef.current?.scrollIntoView({ block: "center" });
     }
-    load();
-  }, []);
+  }, [error]);
+
+  async function loadAccount() {
+    setAccountError("");
+    try {
+      const supabase = createClient();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) throw new Error("Your session could not be verified. Sign in again or retry.");
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("plan, credits").eq("id", user.id).single();
+      if (profileError || !profile || !PLAN_ORDER.includes(profile.plan) ||
+          !Number.isFinite(profile.credits) || profile.credits < 0) {
+        throw new Error("Could not load your plan and credit balance. Retry before creating a video.");
+      }
+      const { data: tmpl, error: templateError } = await supabase.from("templates").select("*").eq("active", true).order("sort_order");
+      if (templateError || !Array.isArray(tmpl)) throw new Error("Could not load video templates. Please retry.");
+      setUserPlan(profile.plan);
+      setUserCredits(profile.credits);
+      setTemplates(tmpl);
+    } catch (err) {
+      setAccountError(err instanceof Error ? err.message : "Could not load your account. Please retry.");
+    }
+  }
+
+  useEffect(() => { void loadAccount(); }, []);
 
   function canUseTemplate(templatePlan: string) {
-    return PLAN_ORDER.indexOf(userPlan) >= PLAN_ORDER.indexOf(templatePlan);
+    return userCredits !== null && PLAN_ORDER.includes(templatePlan) &&
+      PLAN_ORDER.indexOf(userPlan) >= PLAN_ORDER.indexOf(templatePlan);
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -67,7 +101,23 @@ export default function UploadPage() {
   }
 
   async function handleSubmit() {
-    if (!file || !selectedTemplate) return;
+    if (!file || !selectedTemplate || submittingRef.current || userCredits === null || accountError) return;
+    if (!title.trim() || title.trim().length > 300 || artist.length > 300) {
+      setError("Enter a title of 1–300 characters and an artist name up to 300 characters.");
+      return;
+    }
+    const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!AUDIO_EXTENSIONS.includes(extension) || file.size === 0 || file.size > MAX_UPLOAD_BYTES) {
+      setError("Choose an MP3, MP4, WAV, or M4A file up to 25 MB.");
+      return;
+    }
+    const required = creditCost(userPlan, selectedTemplate.background_type, selectedCaption);
+    if (userCredits < required) {
+      setError("Your displayed balance is too low for this video. Refresh your account balance or top up before trying again.");
+      void loadAccount();
+      return;
+    }
+    submittingRef.current = true;
     setLoading(true);
     setError("");
 
@@ -76,10 +126,14 @@ export default function UploadPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not logged in");
 
-      const ext = file.name.split(".").pop();
+      const uploadFile = clipEnabled ? await makeClipFile(file, {
+        startMs: clipStart.trim() ? Math.round(Number(clipStart) * 1000) : NaN,
+        endMs: clipEnd.trim() ? Math.round(Number(clipEnd) * 1000) : NaN,
+      }) : file;
+      const ext = uploadFile.name.split(".").pop();
       const filePath = `${user.id}/${Date.now()}.${ext}`;
 
-      const { error: uploadError } = await supabase.storage.from("uploads").upload(filePath, file);
+      const { error: uploadError } = await supabase.storage.from("uploads").upload(filePath, uploadFile);
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from("uploads").getPublicUrl(filePath);
@@ -99,7 +153,7 @@ export default function UploadPage() {
         .single();
       if (dbError) throw dbError;
 
-      const res = await fetch("/api/process", {
+      await submitAndConfirm(fetch, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -113,22 +167,17 @@ export default function UploadPage() {
         }),
       });
 
-      if (res.status === 403) {
-        const data = await res.json();
-        if (data.error === "Not enough credits. Top up to continue.") {
-          throw new Error(`Not enough credits. You need ${data.required} credits but only have ${data.credits}. Go to Settings to top up.`);
-        }
-        throw new Error("You've reached your limit. Upgrade your plan to continue.");
-      }
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "Video processing failed. Please try again.");
-      }
       router.push("/dashboard");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
+      if (err instanceof SubmissionUnconfirmedError) {
+        setSubmissionUnconfirmed(true);
+        setError("We could not confirm the response. Your video may already be processing. Check your dashboard before creating another video.");
+        // Keep this attempt locked: another upload would create another billable job.
+      } else {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+        submittingRef.current = false;
+      }
     }
   }
 
@@ -186,7 +235,7 @@ export default function UploadPage() {
           </p>
         </div>
         <p style={{ fontSize: "0.75rem", color: "rgba(245,240,235,0.3)", textAlign: "right" }}>
-                  Your balance: <span style={{ color: "#f5f0eb" }}>{userCredits} credits</span>
+                  Your balance: <span style={{ color: "#f5f0eb" }}>{userCredits === null ? (accountError ? "Unavailable" : "Loading…") : userCredits + " credits"}</span>
                 </p>
         <div style={{ display: "flex", gap: "6px", marginBottom: "3rem" }}>
           {steps.map((s, i) => (
@@ -194,7 +243,8 @@ export default function UploadPage() {
           ))}
         </div>
 
-        {error && <p role="alert" style={{ color: "#f5b2bc", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</p>}
+        {accountError && <div role="alert"><p>{accountError}</p><button type="button" onClick={loadAccount}>Retry account loading</button></div>}
+        {error && <p ref={errorRef} tabIndex={-1} role="alert" style={{ color: "#f5b2bc", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</p>}
 
         {/* Step 1 — Upload */}
         {step === "upload" && (
@@ -215,6 +265,18 @@ export default function UploadPage() {
                 </label>
               </div>
             </div>
+
+            {file && (
+              <fieldset>
+                <legend>Clip</legend>
+                <label><input type="checkbox" checked={clipEnabled} onChange={e => setClipEnabled(e.target.checked)} /> Render one 20–35 second section</label>
+                {clipEnabled && <div>
+                  <label>Start (seconds) <input type="number" min="0" step="0.001" required value={clipStart} onChange={e => setClipStart(e.target.value)} /></label>{" "}
+                  <label>End (seconds) <input type="number" min="20" step="0.001" required value={clipEnd} onChange={e => setClipEnd(e.target.value)} /></label>
+                  <p>Only this section will be uploaded and rendered.</p>
+                </div>}
+              </fieldset>
+            )}
 
             <div>
               <label style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(245,240,235,0.4)", display: "block", marginBottom: "0.75rem" }}>Song Title</label>
@@ -313,13 +375,14 @@ export default function UploadPage() {
         {step === "caption" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
             <p style={{ fontSize: "0.75rem", color: "rgba(245,240,235,0.3)", textAlign: "right" }}>
-              Your balance: <span style={{ color: "#f5f0eb" }}>{userCredits} credits</span>
+              Your balance: <span style={{ color: "#f5f0eb" }}>{userCredits === null ? (accountError ? "Unavailable" : "Loading…") : userCredits + " credits"}</span>
             </p>
             {/* rest of caption step */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "1px", background: "rgba(200,16,46,0.08)", border: "1px solid rgba(200,16,46,0.08)" }}>
               {CAPTION_STYLES.map((style) => (
                 <button
                   key={style.id}
+                  aria-pressed={selectedCaption === style.id}
                   onClick={() => setSelectedCaption(style.id)}
                   style={{
                     padding: "0",
@@ -334,7 +397,7 @@ export default function UploadPage() {
                   onMouseEnter={(e) => { if (selectedCaption !== style.id) (e.currentTarget as HTMLElement).style.background = "rgba(139,0,20,0.1)"; }}
                   onMouseLeave={(e) => { if (selectedCaption !== style.id) (e.currentTarget as HTMLElement).style.background = "rgba(13,3,5,0.5)"; }}
                 >
-                  <div style={{ width: "100%", height: "90px", background: "#000", display: "flex", alignItems: style.preview.bottom ? "flex-end" : "center", justifyContent: "center", padding: style.preview.bottom ? "0 0 10px 0" : "0" }}>
+                  {isNeonStyle(style.id) ? <NeonCaptionPreview style={style.id} /> : <div style={{ width: "100%", height: "90px", background: "#000", display: "flex", alignItems: style.preview.bottom ? "flex-end" : "center", justifyContent: "center", padding: style.preview.bottom ? "0 0 10px 0" : "0" }}>
                     <span style={{
                       fontSize: style.preview.bottom ? "13px" : "20px",
                       fontWeight: style.preview.bottom ? "400" : "800",
@@ -344,7 +407,7 @@ export default function UploadPage() {
                       padding: style.preview.highlight ? "3px 8px" : "0",
                       WebkitTextStroke: style.preview.yellow ? "0.5px white" : "none",
                     }}>{style.preview.text}</span>
-                  </div>
+                  </div>}
                   <div style={{ padding: "0.9rem 1.1rem" }}>
                     <p style={{ fontSize: "0.85rem", fontWeight: "600", color: selectedCaption === style.id ? "#f5f0eb" : "rgba(245,240,235,0.7)", marginBottom: "0.2rem" }}>{style.label}</p>
                     <p style={{ fontSize: "0.7rem", color: "rgba(245,240,235,0.3)" }}>{style.desc}</p>
@@ -361,15 +424,13 @@ export default function UploadPage() {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem", background: "rgba(139,0,20,0.1)", border: "1px solid rgba(200,16,46,0.2)" }}>
                   <span style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(245,240,235,0.4)" }}>Credit Cost</span>
                   <span style={{ fontSize: "1rem", fontWeight: "700", color: "#c8102e" }}>
-                    {selectedTemplate?.background_type === "color-block" || selectedTemplate?.background_type === "dark-solid"
-                      ? "100 credits"
-                      : "200 credits"}
+                    {creditCost(userPlan, selectedTemplate?.background_type, selectedCaption)} credits
                   </span>
                 </div>
                 <div style={{ display: "flex", gap: "1rem" }}>
                   <button onClick={() => setStep("template")} style={{ flex: 1, padding: "1rem", background: "transparent", color: "rgba(245,240,235,0.4)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "0.8rem", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", fontFamily: "'Georgia', serif" }}>← Back</button>
-                  <button onClick={handleSubmit} disabled={loading} style={{ flex: 2, padding: "1rem", background: "#8b0014", color: "#f5f0eb", border: "1px solid rgba(200,16,46,0.6)", fontSize: "0.8rem", letterSpacing: "0.2em", textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "'Georgia', serif" }}>
-                    {loading ? "Creating..." : "Create Video →"}
+                  <button onClick={submissionUnconfirmed ? () => router.push("/dashboard") : handleSubmit} disabled={loading || userCredits === null || !!accountError} style={{ flex: 2, padding: "1rem", background: "#8b0014", color: "#f5f0eb", border: "1px solid rgba(200,16,46,0.6)", fontSize: "0.8rem", letterSpacing: "0.2em", textTransform: "uppercase", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, fontFamily: "'Georgia', serif" }}>
+                    {loading ? "Creating..." : submissionUnconfirmed ? "Check Dashboard →" : "Create Video →"}
                   </button>
                 </div>
               </div>
