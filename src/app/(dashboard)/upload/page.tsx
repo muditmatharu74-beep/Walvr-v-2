@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { MAX_UPLOAD_BYTES, AUDIO_EXTENSIONS } from "@/lib/rendering/upload";
 import { submitAndConfirm, SubmissionUnconfirmedError } from "@/lib/rendering/submission-response";
+import { makeClipFile } from "@/lib/rendering/clip-audio";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -41,6 +42,9 @@ export default function UploadPage() {
   const [userPlan, setUserPlan] = useState("");
   const [userCredits, setUserCredits] = useState<number | null>(null);
   const [accountError, setAccountError] = useState("");
+  const [clipEnabled, setClipEnabled] = useState(false);
+  const [clipStart, setClipStart] = useState("0");
+  const [clipEnd, setClipEnd] = useState("30");
 
   useEffect(() => {
     if (error) {
@@ -122,10 +126,14 @@ export default function UploadPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not logged in");
 
-      const ext = file.name.split(".").pop();
+      const uploadFile = clipEnabled ? await makeClipFile(file, {
+        startMs: clipStart.trim() ? Math.round(Number(clipStart) * 1000) : NaN,
+        endMs: clipEnd.trim() ? Math.round(Number(clipEnd) * 1000) : NaN,
+      }) : file;
+      const ext = uploadFile.name.split(".").pop();
       const filePath = `${user.id}/${Date.now()}.${ext}`;
 
-      const { error: uploadError } = await supabase.storage.from("uploads").upload(filePath, file);
+      const { error: uploadError } = await supabase.storage.from("uploads").upload(filePath, uploadFile);
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from("uploads").getPublicUrl(filePath);
@@ -257,6 +265,18 @@ export default function UploadPage() {
                 </label>
               </div>
             </div>
+
+            {file && (
+              <fieldset>
+                <legend>Clip</legend>
+                <label><input type="checkbox" checked={clipEnabled} onChange={e => setClipEnabled(e.target.checked)} /> Render one 20–35 second section</label>
+                {clipEnabled && <div>
+                  <label>Start (seconds) <input type="number" min="0" step="0.001" required value={clipStart} onChange={e => setClipStart(e.target.value)} /></label>{" "}
+                  <label>End (seconds) <input type="number" min="20" step="0.001" required value={clipEnd} onChange={e => setClipEnd(e.target.value)} /></label>
+                  <p>Only this section will be uploaded and rendered.</p>
+                </div>}
+              </fieldset>
+            )}
 
             <div>
               <label style={{ fontSize: "0.7rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(245,240,235,0.4)", display: "block", marginBottom: "0.75rem" }}>Song Title</label>

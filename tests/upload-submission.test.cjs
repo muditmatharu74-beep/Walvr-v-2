@@ -20,10 +20,11 @@ function setup(reply, timeoutMs, profiles){
  const calls={uploads:0,rows:0,requests:0,navigation:[]};
  const react={useState:initial=>{const i=index++;if(state[i]===undefined)state[i]=initial;return[state[i],value=>state[i]=value]},
   useRef:initial=>{const i=refIndex++;return refs[i]??(refs[i]={current:initial})},useEffect:fn=>effects.push(fn)};
- const supabase={auth:{getUser:async()=>({data:{user:{id:'owner'}}})},storage:{from:()=>({upload:async()=>{calls.uploads++;return{error:null}},getPublicUrl:()=>({data:{publicUrl:'https://audio.test/song.mp3'}})})},
+ const supabase={auth:{getUser:async()=>({data:{user:{id:'owner'}}})},storage:{from:()=>({upload:async(_path,file)=>{calls.uploadedFile=file;calls.uploads++;return{error:null}},getPublicUrl:()=>({data:{publicUrl:'https://audio.test/song.mp3'}})})},
   from:()=>({select:()=>({eq:()=>({single:async()=>{const r=profiles.shift();if(r instanceof Error)throw r;return r},order:async()=>({data:[{id:'template',plan_required:'free'}]})})}),insert:()=>({select:()=>({single:async()=>{calls.rows++;return{data:{id:'video'},error:null}}})})})};
  const jsx=(type,props)=>({type,props});
  const page=load('src/app/(dashboard)/upload/page.tsx',{
+  '@/lib/rendering/clip-audio':{makeClipFile:async()=>({name:'selected-clip.wav',size:500})},
   react,'react/jsx-runtime':{jsx,jsxs:jsx},'next/navigation':{useRouter:()=>({push:url=>calls.navigation.push(url)})},
   '@/lib/supabase/client':{createClient:()=>supabase},'@/lib/rendering/upload':{MAX_UPLOAD_BYTES:25000000,AUDIO_EXTENSIONS:['mp3']},
   '@/lib/rendering/submission-response':{...responses,submitAndConfirm:(fetcher,request)=>responses.submitAndConfirm(fetcher,request,timeoutMs)},'@/components/NeonCaptionPreview':{NeonCaptionPreview:()=>null},
@@ -102,4 +103,12 @@ test('Studio accounts supported by the server also load on the upload page',asyn
  s.render();await s.loadAccount();
  assert.equal(s.state[10],'studio');assert.equal(s.state[11],1000);
  assert.equal(s.button(s.render(),'Create Video →').props.disabled,false);
+});
+
+test('Create uploads the selected clip instead of the original file',async()=>{
+ const s=setup(()=>Response.json({success:true,renderId:'r'}));
+ s.state[13]=true;s.state[14]='12';s.state[15]='32';
+ await s.button(s.render(),'Create Video →').props.onClick();
+ assert.equal(s.calls.uploadedFile?.name,'selected-clip.wav');
+ assert.deepEqual(s.calls.navigation,['/dashboard']);
 });

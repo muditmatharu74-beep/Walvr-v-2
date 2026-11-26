@@ -25,3 +25,17 @@ test('rejects duplicates and out-of-bounds, fractional or invalid lengths',()=>{
   assert.throws(()=>clipTimelines(source,ranges),{name:'RangeError'});
  }
 });
+
+test('WAV export contains only the selected samples at the original sample rate',()=>{
+ const wav={};
+ vm.runInNewContext(ts.transpile(fs.readFileSync(require.resolve('../src/lib/rendering/clip-audio.ts'),'utf8'),
+  {module:ts.ModuleKind.CommonJS}),{exports:wav,require:id=>id==='./clip-timeline'?mod.exports:{MAX_UPLOAD_BYTES:25_000_000}});
+ const samples=new Float32Array(40000);
+ samples[11999]=1;samples[12000]=0.5;samples[31999]=-0.5;samples[32000]=1;
+ const bytes=wav.encodeClipWav({duration:40,sampleRate:1000,numberOfChannels:1,getChannelData:()=>samples},{startMs:12000,endMs:32000});
+ const view=new DataView(bytes);
+ assert.equal(view.getUint32(24,true),1000);
+ assert.equal(view.getUint32(40,true),40000);
+ assert.equal(view.getInt16(44,true),16384);
+ assert.equal(view.getInt16(bytes.byteLength-2,true),-16384);
+});
